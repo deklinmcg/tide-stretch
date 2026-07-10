@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tide Stretch — radio slowed by the sea</title>
+<style>
+  :root {
+    --bg: #0b1016;
+    --panel: #121a24;
+    --line: #22303f;
+    --text: #d7e3ee;
+    --dim: #7a8b9b;
+    --accent: #5fd4c4;
+    --accent2: #4a9fd4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; justify-content: center; padding: 28px 16px 60px;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.3px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--dim); font-size: 13px; margin: 6px 0 22px; line-height: 1.5; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px; margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); margin-bottom: 14px; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  button {
+    background: #1b2733; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #06231e; border: none; font-weight: 600; }
+  button.active { background: var(--accent2); color: #04121c; border: none; font-weight: 600; }
+  select, input[type=number] {
+    background: #1b2733; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px;
+  }
+  input[type=number] { width: 72px; }
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 16px; text-align: center; color: var(--dim); font-size: 13px;
+    margin-top: 12px; transition: border-color .15s, color .15s; cursor: pointer;
+  }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  .bigval {
+    font-variant-numeric: tabular-nums;
+    font-size: 44px; font-weight: 200; color: var(--accent);
+    line-height: 1;
+  }
+  .bigval small { font-size: 18px; color: var(--dim); font-weight: 400; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  label.small { font-size: 12px; color: var(--dim); }
+  canvas { width: 100%; height: 110px; display: block; border-radius: 8px; background: #0d141c; margin-top: 12px; }
+  .status { font-size: 12px; color: var(--dim); margin-top: 10px; min-height: 16px; }
+  .status b { color: var(--text); font-weight: 500; }
+  .meter { height: 4px; background: #0d141c; border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0%; background: var(--accent2); border-radius: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .note { font-size: 12px; color: var(--dim); line-height: 1.6; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tide <span>Stretch</span></h1>
+  <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Start the radio (or drop a file in), press play, switch the live tide on, and leave it running.</p>
+
+  <div class="panel">
+    <h2>Source sound</h2>
+    <div class="row">
+      <button id="btnRadio">📻 Highland Radio live</button>
+      <button id="btnDemo">Use built-in wave noise</button>
+      <span class="status" id="srcStatus" style="margin-top:0">no sound loaded</span>
+    </div>
+    <div class="drop" id="drop">…or drop an audio file here (waves, shipping forecast, anything) / click to browse</div>
+    <input type="file" id="file" accept="audio/*" style="display:none">
+    <div class="meter"><i id="posBar"></i></div>
+    <div class="note">The bar shows where we are in the source recording — at high stretch it crawls.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Stretch</h2>
+    <div class="grid2">
+      <input type="range" id="stretch" min="0" max="1000" value="450">
+      <div class="bigval"><span id="stretchVal">8.0</span><small>×</small></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <label class="small">window
+        <select id="winSize">
+          <option value="1024">1024 (grainy)</option>
+          <option value="4096" selected>4096 (classic)</option>
+          <option value="16384">16384 (glacial)</option>
+        </select>
+      </label>
+      <label class="small">glide
+        <select id="glide">
+          <option value="0.5">fast (0.5 s)</option>
+          <option value="3" selected>slow (3 s)</option>
+          <option value="15">tidal (15 s)</option>
+        </select>
+      </label>
+      <label class="small">volume
+        <input type="range" id="vol" min="0" max="100" value="80" style="width:110px; vertical-align:middle">
+      </label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Tide signal</h2>
+    <div class="row">
+      <button id="btnLive">Live tide: off</button>
+      <select id="station" title="tide gauge station"><option value="uk:E70039">Lowestoft (UK)</option></select>
+      <span class="status" id="liveStatus" style="margin-top:0"></span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnTide">Simulated: off</button>
+      <label class="small">cycle
+        <select id="tidePeriod">
+          <option value="60">1 minute (demo)</option>
+          <option value="300" selected>5 minutes</option>
+          <option value="1800">30 minutes</option>
+          <option value="44700">12 h 25 m (real tide)</option>
+        </select>
+      </label>
+      <label class="small">low <input type="number" id="tideMin" value="1.5" min="1" max="100" step="0.5"></label>
+      <label class="small">high <input type="number" id="tideMax" value="30" min="1" max="100" step="0.5"></label>
+    </div>
+    <canvas id="scope"></canvas>
+    <div class="note">Live mode reads a real tide gauge every 5 minutes — UK stations from the Environment Agency, Irish stations from the Marine Institute. The station's last 25 hours calibrate its high/low range: high water = stretch at "low", tide fully out = stretch at "high". Teal line = actual stretch over the last two minutes.</div>
+  </div>
+
+  <div class="row">
+    <button class="primary" id="btnPlay">▶ Play</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <p class="note" style="margin-top:22px">
+    Sound engine: <a href="https://github.com/paulnasca/paulstretch_python" style="color:var(--accent2)">paulstretch</a> by Nasca Octavian Paul, running in real time in your browser.
+    Tide data: UK <a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" style="color:var(--accent2)">Environment Agency</a> · Ireland <a href="https://erddap.marine.ie" style="color:var(--accent2)">Marine Institute</a>.
+    Radio: Highland Radio, Letterkenny, Co. Donegal — streamed directly from their public stream to your browser; nothing is rebroadcast.
+    Everything runs client-side; no server, no tracking. Made in Donegal.
+  </p>
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// AudioWorklet: real-time paulstretch
+// Windows of the source are FFT'd, phases randomised, inverse-FFT'd
+// and overlap-added. Playhead advances at hop/stretch per grain.
+// ---------------------------------------------------------------
+const workletCode = `
+class Ring {
+  constructor(cap) { this.buf = new Float32Array(cap); this.cap = cap; this.r = 0; this.w = 0; this.len = 0; }
+  push(x) { if (this.len < this.cap) { this.buf[this.w] = x; this.w = (this.w + 1) % this.cap; this.len++; } }
+  pop() { const x = this.buf[this.r]; this.r = (this.r + 1) % this.cap; this.len--; return x; }
+}
+
+function makeFFT(n) {
+  const levels = Math.round(Math.log2(n));
+  const cosT = new Float32Array(n / 2), sinT = new Float32Array(n / 2);
+  for (let i = 0; i < n / 2; i++) { cosT[i] = Math.cos(2 * Math.PI * i / n); sinT[i] = Math.sin(2 * Math.PI * i / n); }
+  const rev = new Uint32Array(n);
+  for (let i = 0; i < n; i++) { let r = 0; for (let j = 0; j < levels; j++) r = (r << 1) | ((i >>> j) & 1); rev[i] = r; }
+  return function (re, im, inv) {
+    for (let i = 0; i < n; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let size = 2; size <= n; size *= 2) {
+      const half = size / 2, step = n / size;
+      for (let i = 0; i < n; i += size) {
+        for (let j = i, k = 0; j < i + half; j++, k += step) {
+          const c = cosT[k], s = inv ? sinT[k] : -sinT[k];
+          const l = j + half;
+          const tre = re[l] * c - im[l] * s;
+          const tim = re[l] * s + im[l] * c;
+          re[l] = re[j] - tre; im[l] = im[j] - tim;
+          re[j] += tre; im[j] += tim;
+        }
+      }
+    }
+    if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+  };
+}
+
+class Paulstretch extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.src = null;          // file mode: array of Float32Array, one per channel
+    this.mode = 'file';       // 'file' | 'live' (rolling ring buffer fed by a stream)
+    this.lbuf = null; this.cap = 0; this.wAbs = 0;   // live ring + absolute write count
+    this.playing = false;
+    this.stretch = 8;
+    this.target = 8;
+    this.glide = 3;           // seconds
+    this.position = 0;
+    this.tick = 0;
+    this.initSize(4096);
+    this.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.t === 'load') { this.mode = 'file'; this.src = m.ch; this.position = 0; this.resetState(); }
+      else if (m.t === 'liveStart') { this.mode = 'live'; this.cap = m.cap; this.lbuf = new Float32Array(m.cap); this.wAbs = 0; this.position = 0; this.resetState(); }
+      else if (m.t === 'append') {
+        if (this.mode === 'live' && this.lbuf) {
+          const d = m.data, C = this.cap;
+          for (let i = 0; i < d.length; i++) this.lbuf[(this.wAbs + i) % C] = d[i];
+          this.wAbs += d.length;
+          // if the ring lapped the playhead, drag it forward
+          const minPos = this.wAbs - C + 2 * this.N;
+          if (this.position < minPos) this.position = Math.max(0, minPos);
+        }
+      }
+      else if (m.t === 'play') this.playing = true;
+      else if (m.t === 'stop') this.playing = false;
+      else if (m.t === 'stretch') this.target = m.v;
+      else if (m.t === 'glide') this.glide = m.v;
+      else if (m.t === 'win') { this.initSize(m.v); }
+    };
+  }
+
+  initSize(N) {
+    this.N = N; this.H = N / 2;
+    this.fft = makeFFT(N);
+    this.win = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const x = (i * 2) / (N - 1) - 1;                 // -1 .. 1
+      this.win[i] = Math.pow(1 - x * x, 1.25);          // paulstretch window
+    }
+    this.norm = new Float32Array(this.H);
+    for (let j = 0; j < this.H; j++) {
+      const v = this.win[j] * this.win[j] + this.win[j + this.H] * this.win[j + this.H];
+      this.norm[j] = Math.max(v, 1e-3);
+    }
+    this.re = new Float32Array(N);
+    this.im = new Float32Array(N);
+    this.resetState();
+  }
+
+  resetState() {
+    const chs = this.mode === 'live' ? 1 : (this.src ? Math.min(this.src.length, 2) : 2);
+    this.olap = []; this.fifo = [];
+    for (let c = 0; c < chs; c++) {
+      this.olap.push(new Float32Array(this.N));
+      this.fifo.push(new Ring(this.N * 8 + 65536));
+    }
+  }
+
+  grain() {
+    const N = this.N, H = this.H;
+    const chs = this.fifo.length;
+    const p = Math.floor(this.position);
+    for (let c = 0; c < chs; c++) {
+      const re = this.re, im = this.im;
+      if (this.mode === 'live') {
+        const b = this.lbuf, C = this.cap;
+        for (let i = 0; i < N; i++) { re[i] = b[(p + i) % C] * this.win[i]; im[i] = 0; }
+      } else {
+        const s = this.src[c], L = s.length;
+        for (let i = 0; i < N; i++) { re[i] = s[(p + i) % L] * this.win[i]; im[i] = 0; }
+      }
+      this.fft(re, im, false);
+      // randomise phases, keep magnitudes (hermitian symmetry for real output)
+      re[0] = Math.hypot(re[0], im[0]); im[0] = 0;
+      for (let k = 1; k < H; k++) {
+        const mag = Math.hypot(re[k], im[k]);
+        const ph = Math.random() * 6.283185307179586;
+        const a = mag * Math.cos(ph), b = mag * Math.sin(ph);
+        re[k] = a; im[k] = b;
+        re[N - k] = a; im[N - k] = -b;
+      }
+      re[H] = Math.hypot(re[H], im[H]); im[H] = 0;
+      this.fft(re, im, true);
+      const o = this.olap[c], f = this.fifo[c];
+      for (let i = 0; i < N; i++) o[i] += re[i] * this.win[i];
+      for (let j = 0; j < H; j++) f.push(o[j] / this.norm[j]);
+      o.copyWithin(0, H); o.fill(0, H);
+    }
+    // glide stretch: exponential approach with time constant = glide seconds
+    const grainDur = H / sampleRate;
+    const k = 1 - Math.exp(-grainDur / Math.max(this.glide, 0.05));
+    this.stretch += (this.target - this.stretch) * k;
+    const adv = H / this.stretch;
+    if (this.mode === 'live') this.position += adv;                  // no loop — crawls behind the stream
+    else this.position = (this.position + adv) % this.src[0].length;
+  }
+
+  canGrain() {
+    if (this.mode === 'live') return this.lbuf && Math.floor(this.position) + this.N <= this.wAbs;
+    return !!this.src;
+  }
+
+  process(inputs, outputs) {
+    // live mode: whatever is wired into our input (the radio element)
+    // is appended to the rolling ring buffer, even while stopped
+    const inp = inputs[0];
+    if (this.mode === 'live' && this.lbuf && inp && inp.length && inp[0].length) {
+      const C = this.cap, a = inp[0], b = inp.length > 1 ? inp[1] : inp[0];
+      for (let i = 0; i < a.length; i++) this.lbuf[(this.wAbs + i) % C] = (a[i] + b[i]) * 0.5;
+      this.wAbs += a.length;
+      const minPos = this.wAbs - C + 2 * this.N;
+      if (this.position < minPos) this.position = Math.max(0, minPos);
+    }
+    const out = outputs[0];
+    const n = out[0].length;
+    const hasSource = this.mode === 'live' ? !!this.lbuf : !!this.src;
+    if (!this.playing || !hasSource) {
+      for (const ch of out) ch.fill(0);
+      return true;
+    }
+    const wantChs = this.mode === 'live' ? 1 : Math.min(this.src.length, 2);
+    if (this.fifo.length !== wantChs) this.resetState();
+    while (this.fifo[0].len < n && this.canGrain()) this.grain();
+    const chs = this.fifo.length;
+    const avail = Math.min(this.fifo[0].len, n);
+    for (let i = 0; i < avail; i++) {
+      const a = this.fifo[0].pop();
+      const b = chs > 1 ? this.fifo[1].pop() : a;
+      out[0][i] = a;
+      if (out.length > 1) out[1][i] = b;
+    }
+    for (let i = avail; i < n; i++) { out[0][i] = 0; if (out.length > 1) out[1][i] = 0; }
+    if (++this.tick % 12 === 0) {
+      const st = { t: 'state', stretch: this.stretch };
+      if (this.mode === 'live') {
+        st.live = true;
+        st.lag = (this.wAbs - this.position) / sampleRate;
+        st.frac = Math.min(1, Math.max(0, (this.wAbs - this.position) / this.cap));
+      } else {
+        st.pos = this.position / this.src[0].length;
+      }
+      this.port.postMessage(st);
+    }
+    return true;
+  }
+}
+registerProcessor('paulstretch', Paulstretch);
+`;
+
+// ---------------------------------------------------------------
+// Main thread
+// ---------------------------------------------------------------
+let ctx = null, node = null, gain = null;
+let playing = false, loaded = false;
+let actualStretch = 8;
+const history = [];            // [time, stretch]
+
+const $ = id => document.getElementById(id);
+const sliderToStretch = v => Math.pow(10, (v / 1000) * 2);   // 0..1000 -> 1..100 (log)
+const stretchToSlider = s => Math.log10(Math.max(s, 1)) / 2 * 1000;
+
+let audioReady = null;
+function ensureAudio() {
+  if (!audioReady) audioReady = initAudio();
+  return audioReady;
+}
+async function initAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
+  await ctx.audioWorklet.addModule(url);
+  node = new AudioWorkletNode(ctx, 'paulstretch', { outputChannelCount: [2] });
+  gain = ctx.createGain();
+  gain.gain.value = 0.8;
+  node.connect(gain).connect(ctx.destination);
+  node.port.onmessage = e => {
+    if (e.data.t === 'state') {
+      actualStretch = e.data.stretch;
+      if (e.data.live) {
+        $('posBar').style.width = (e.data.frac * 100).toFixed(2) + '%';
+        if (radio.on && e.data.lag > 1) {
+          const lag = e.data.lag;
+          const txt = lag < 90 ? Math.round(lag) + ' s' : (lag / 60).toFixed(1) + ' min';
+          $('srcStatus').innerHTML = 'live: <b>' + radio.name + '</b> — hearing the radio from ' + txt + ' ago';
+        }
+      } else {
+        $('posBar').style.width = (e.data.pos * 100).toFixed(2) + '%';
+      }
+    }
+  };
+  sendStretch(); sendGlide();
+}
+
+function sendStretch() {
+  const v = sliderToStretch(+$('stretch').value);
+  $('stretchVal').textContent = v.toFixed(1);
+  if (node) node.port.postMessage({ t: 'stretch', v });
+}
+function sendGlide() { if (node) node.port.postMessage({ t: 'glide', v: +$('glide').value }); }
+
+function loadChannels(chData, label) {
+  stopRadio();
+  node.port.postMessage({ t: 'load', ch: chData }, chData.map(a => a.buffer));
+  loaded = true;
+  $('srcStatus').innerHTML = 'loaded: <b>' + label + '</b>';
+}
+
+// --- live radio (Highland Radio, Letterkenny) ---
+// An <audio> element does the streaming (codecs, buffering, reconnects),
+// and its output is routed INTO the paulstretch worklet, which appends it
+// to a 5-minute rolling ring buffer. The stream sends CORS headers, so the
+// samples are readable rather than tainted.
+const RADIO_URL = 'https://playerservices.streamtheworld.com/api/livestream-redirect/HIGHLAND_RADIO.mp3';
+let radio = { on: false, name: 'Highland Radio' };
+let radioEl = null, radioSrc = null;
+
+async function startRadio() {
+  await ensureAudio();
+  await ctx.resume();
+  radio.on = true; loaded = true;
+  $('btnRadio').classList.add('active');
+  $('btnRadio').textContent = '📻 Highland Radio: connecting…';
+  $('srcStatus').textContent = 'connecting to the stream…';
+  node.port.postMessage({ t: 'liveStart', cap: Math.floor(ctx.sampleRate * 300) });
+  if (!radioEl) {
+    radioEl = new Audio();
+    radioEl.crossOrigin = 'anonymous';
+    radioEl.preload = 'auto';
+    radioSrc = ctx.createMediaElementSource(radioEl);
+    radioEl.addEventListener('playing', () => {
+      if (radio.on) $('btnRadio').textContent = '📻 Highland Radio: live';
+    });
+    radioEl.addEventListener('error', () => {
+      console.log('[radio] element error — retrying in 3 s');
+      if (radio.on) setTimeout(() => {
+        if (radio.on) { radioEl.load(); radioEl.play().catch(() => {}); }
+      }, 3000);
+    });
+  }
+  radioSrc.connect(node);
+  radioEl.src = RADIO_URL;
+  try { await radioEl.play(); } catch (e) { console.log('[radio] play() refused:', e.message); }
+}
+
+function stopRadio() {
+  if (!radio.on) return;
+  radio.on = false;
+  try { radioSrc.disconnect(node); } catch (e) {}
+  if (radioEl) { radioEl.pause(); radioEl.removeAttribute('src'); radioEl.load(); }
+  $('btnRadio').classList.remove('active');
+  $('btnRadio').textContent = '📻 Highland Radio live';
+}
+
+$('btnRadio').onclick = () => { radio.on ? stopRadio() : startRadio(); };
+
+async function loadFile(file) {
+  await ensureAudio();
+  const buf = await file.arrayBuffer();
+  let audio;
+  try { audio = await ctx.decodeAudioData(buf); }
+  catch (err) { $('srcStatus').textContent = 'could not decode that file'; return; }
+  const chs = [];
+  for (let c = 0; c < Math.min(audio.numberOfChannels, 2); c++) {
+    chs.push(new Float32Array(audio.getChannelData(c)));
+  }
+  loadChannels(chs, file.name + ' (' + audio.duration.toFixed(1) + ' s)');
+}
+
+// Built-in demo: filtered noise swelling like waves, rendered offline
+async function loadDemo() {
+  await ensureAudio();
+  const sr = ctx.sampleRate, dur = 24;
+  const off = new OfflineAudioContext(2, sr * dur, sr);
+  const nb = off.createBuffer(2, sr * dur, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = nb.getChannelData(c);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const src = off.createBufferSource(); src.buffer = nb;
+  const lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.5;
+  const g = off.createGain();
+  // three overlapping swells per loop, like sets of waves
+  g.gain.setValueAtTime(0.15, 0);
+  for (let t = 0; t < dur; t += 0.25) {
+    const swell = 0.25 + 0.75 * Math.pow(Math.max(0, Math.sin(2 * Math.PI * t / 8) * 0.6 + Math.sin(2 * Math.PI * t / 13.7 + 1) * 0.4), 2);
+    g.gain.linearRampToValueAtTime(swell, t);
+  }
+  const lfoLp = off.createOscillator(); lfoLp.frequency.value = 1 / 11;
+  const lfoAmt = off.createGain(); lfoAmt.gain.value = 500;
+  lfoLp.connect(lfoAmt).connect(lp.frequency); lfoLp.start();
+  src.connect(lp).connect(g).connect(off.destination); src.start();
+  const rendered = await off.startRendering();
+  const chs = [new Float32Array(rendered.getChannelData(0)), new Float32Array(rendered.getChannelData(1))];
+  loadChannels(chs, 'built-in wave noise (24 s loop)');
+}
+
+// --- UI wiring ---
+$('btnDemo').onclick = () => loadDemo();
+$('stretch').oninput = sendStretch;
+$('glide').onchange = sendGlide;
+$('vol').oninput = () => { if (gain) gain.gain.value = Math.pow(+$('vol').value / 100, 1.6); };
+$('winSize').onchange = () => { if (node) node.port.postMessage({ t: 'win', v: +$('winSize').value }); };
+
+$('btnPlay').onclick = async () => {
+  await ensureAudio();
+  if (!loaded && !radio.on) await loadDemo();
+  await ctx.resume();
+  playing = !playing;
+  node.port.postMessage({ t: playing ? 'play' : 'stop' });
+  $('btnPlay').textContent = playing ? '⏸ Stop' : '▶ Play';
+  $('status').textContent = playing ? 'playing — move the slider or switch the tide on' : '';
+};
+
+// file drop
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); };
+['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+// --- tide signal (simulated + live) ---
+// Runs on setInterval, NOT requestAnimationFrame: rAF freezes in background
+// tabs, and this is meant to be left running in one.
+let tideMode = 'off';                  // 'off' | 'sim' | 'live'
+let tideStart = 0;
+let live = { lastPoll: 0, station: 'uk:E70039', name: 'Lowestoft (UK)' };
+const EA = 'https://environment.data.gov.uk/flood-monitoring';
+const IE = 'https://erddap.marine.ie/erddap/tabledap/IrishNationalTideGaugeNetwork.json';
+
+function setMode(m) {
+  tideMode = (tideMode === m) ? 'off' : m;
+  tideStart = Date.now();
+  $('btnTide').textContent = 'Simulated: ' + (tideMode === 'sim' ? 'on' : 'off');
+  $('btnTide').classList.toggle('active', tideMode === 'sim');
+  $('btnLive').textContent = 'Live tide: ' + (tideMode === 'live' ? 'on' : 'off');
+  $('btnLive').classList.toggle('active', tideMode === 'live');
+  $('stretch').disabled = tideMode !== 'off';
+  if (tideMode !== 'live') $('liveStatus').textContent = '';
+  if (tideMode === 'live') { live.lastPoll = 0; loadStations(); }
+}
+$('btnTide').onclick = () => setMode('sim');
+$('btnLive').onclick = () => setMode('live');
+$('station').onchange = () => {
+  live.station = $('station').value;
+  live.name = $('station').selectedOptions[0].textContent;
+  live.lastPoll = 0;                        // poll the new station straight away
+};
+
+function addStationGroup(label, opts) {
+  const g = document.createElement('optgroup');
+  g.label = label;
+  for (const [text, value] of opts) {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text;
+    g.appendChild(o);
+  }
+  $('station').appendChild(g);
+}
+
+let stationsLoaded = false;
+async function loadStations() {
+  if (stationsLoaded) return;
+  stationsLoaded = true;
+  // UK: Environment Agency tidal level stations
+  try {
+    const d = await (await fetch(EA + '/id/stations?parameter=level&qualifier=Tidal+Level&_limit=500')).json();
+    const seen = new Set(['E70039']);
+    const opts = [];
+    for (const s of d.items || []) {
+      if (!s.notation || !s.label || seen.has(s.notation)) continue;
+      seen.add(s.notation);
+      opts.push([String(s.label) + ' (UK)', 'uk:' + s.notation]);
+    }
+    opts.sort((a, b) => a[0].localeCompare(b[0]));
+    addStationGroup('United Kingdom', opts);
+  } catch (e) { /* keep default */ }
+  // Ireland: Marine Institute tide gauge network (stations seen in last 2 h)
+  try {
+    const since = new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
+    const d = await (await fetch(IE + '?station_id,time&time%3E=' + since)).json();
+    const names = [...new Set(d.table.rows.map(r => r[0]))].sort();
+    addStationGroup('Ireland', names.map(n => [n + ' (IE)', 'ie:' + n]));
+  } catch (e) { /* Irish feed unavailable — UK list still works */ }
+}
+
+// One code path for both feeds: fetch the last ~25 h of levels,
+// calibrate min/max from them, and take the newest reading as "now".
+async function readTide() {
+  const i = live.station.indexOf(':');
+  const src = live.station.slice(0, i), id = live.station.slice(i + 1);
+  if (src === 'ie') {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
+    const url = IE + '?station_id,time,Water_Level_OD_Malin&station_id=%22' + encodeURIComponent(id) + '%22&time%3E=' + since;
+    const d = await (await fetch(url)).json();
+    const rows = (d.table.rows || []).filter(r => typeof r[2] === 'number');
+    if (rows.length < 10) throw new Error('too few readings');
+    const vals = rows.map(r => r[2]);
+    const last = rows[rows.length - 1];
+    return { min: Math.min(...vals), max: Math.max(...vals), level: last[2], time: last[1] };
+  }
+  const d = await (await fetch(EA + '/id/stations/' + id + '/readings?_sorted&_limit=100')).json();
+  const items = (d.items || []).filter(x => typeof x.value === 'number');
+  if (items.length < 10) throw new Error('too few readings');
+  const vals = items.map(x => x.value);
+  return { min: Math.min(...vals), max: Math.max(...vals), level: items[0].value, time: items[0].dateTime };
+}
+
+async function pollTide() {
+  try {
+    const t = await readTide();
+    const frac = Math.min(1, Math.max(0, (t.level - t.min) / Math.max(t.max - t.min, 0.01)));
+    const lo = +$('tideMin').value, hi = +$('tideMax').value;
+    const s = hi - (hi - lo) * frac;          // high water -> low stretch
+    $('stretch').value = stretchToSlider(s);
+    sendStretch();
+    const age = Math.round((Date.now() - new Date(t.time)) / 60000);
+    $('liveStatus').innerHTML = '<b>' + live.name + '</b> ' + t.level.toFixed(2) + ' m (' + age + ' min ago) → ' + s.toFixed(1) + '×';
+  } catch (e) {
+    $('liveStatus').textContent = 'tide fetch failed — retrying in 5 min';
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  if (tideMode === 'sim') {
+    const period = +$('tidePeriod').value * 1000;
+    const lo = +$('tideMin').value, hi = +$('tideMax').value;
+    const phase = ((now - tideStart) % period) / period;
+    // start at high tide (low stretch) and ebb out
+    const x = (Math.cos(phase * 2 * Math.PI) + 1) / 2;      // 1 -> 0 -> 1
+    const s = hi - (hi - lo) * x;
+    $('stretch').value = stretchToSlider(s);
+    sendStretch();
+  } else if (tideMode === 'live' && now - live.lastPoll > 5 * 60 * 1000) {
+    live.lastPoll = now;
+    pollTide();
+  }
+}, 1000);
+
+// --- scope drawing ---
+const scope = $('scope');
+function drawScope(now) {
+  history.push([now, actualStretch]);
+  while (history.length && now - history[0][0] > 120000) history.shift();
+  const dpr = window.devicePixelRatio || 1;
+  const w = scope.clientWidth * dpr, h = scope.clientHeight * dpr;
+  if (scope.width !== w) { scope.width = w; scope.height = h; }
+  const g = scope.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = '#22303f'; g.lineWidth = 1;
+  [1, 10, 100].forEach(s => {
+    const y = h - (Math.log10(s) / 2) * (h - 12) - 6;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    g.fillStyle = '#4a5a6a'; g.font = (10 * dpr) + 'px sans-serif';
+    g.fillText(s + 'x', 6 * dpr, y - 3 * dpr);
+  });
+  if (history.length > 1) {
+    g.strokeStyle = '#5fd4c4'; g.lineWidth = 1.5 * dpr;
+    g.beginPath();
+    for (let i = 0; i < history.length; i++) {
+      const [t, s] = history[i];
+      const x = w - ((now - t) / 120000) * w;
+      const y = h - (Math.log10(Math.max(s, 1)) / 2) * (h - 12) - 6;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+  }
+}
+
+function loop(now) {
+  drawScope(now);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
