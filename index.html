@@ -57,6 +57,12 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   label.small { font-size: 12px; color: var(--dim); }
   canvas { width: 100%; height: 110px; display: block; border-radius: 8px; background: #0d141c; margin-top: 12px; }
+  #wave {
+    width: 100%; height: auto; display: block;
+    image-rendering: pixelated;
+    border-radius: 12px; border: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
   .status { font-size: 12px; color: var(--dim); margin-top: 10px; min-height: 16px; }
   .status b { color: var(--text); font-weight: 500; }
   .meter { height: 4px; background: #0d141c; border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -69,6 +75,8 @@
 <div class="wrap">
   <h1>Tide <span>Stretch</span></h1>
   <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Start the radio (or drop a file in), press play, switch the live tide on, and leave it running.</p>
+
+  <canvas id="wave" width="240" height="72"></canvas>
 
   <div class="panel">
     <h2>Source sound</h2>
@@ -114,7 +122,7 @@
     <h2>Tide signal</h2>
     <div class="row">
       <button id="btnLive">Live tide: off</button>
-      <select id="station" title="tide gauge station"><option value="uk:E70039">Lowestoft (UK)</option></select>
+      <select id="station" title="tide gauge station"><option value="ie:Killybegs Port">Killybegs Port (IE)</option></select>
       <span class="status" id="liveStatus" style="margin-top:0"></span>
     </div>
     <div class="row" style="margin-top:10px">
@@ -131,7 +139,7 @@
       <label class="small">high <input type="number" id="tideMax" value="30" min="1" max="100" step="0.5"></label>
     </div>
     <canvas id="scope"></canvas>
-    <div class="note">Live mode reads a real tide gauge every 5 minutes — UK stations from the Environment Agency, Irish stations from the Marine Institute. The station's last 25 hours calibrate its high/low range: high water = stretch at "low", tide fully out = stretch at "high". Teal line = actual stretch over the last two minutes.</div>
+    <div class="note">Live mode reads a real tide gauge every 5 minutes — UK stations from the Environment Agency, Irish from the Marine Institute, Australian (Queensland) from the Queensland Government. The station's last 25 hours calibrate its high/low range: high water = stretch at "low", tide fully out = stretch at "high". Teal line = actual stretch over the last two minutes.</div>
   </div>
 
   <div class="row">
@@ -141,7 +149,7 @@
 
   <p class="note" style="margin-top:22px">
     Sound engine: <a href="https://github.com/paulnasca/paulstretch_python" style="color:var(--accent2)">paulstretch</a> by Nasca Octavian Paul, running in real time in your browser.
-    Tide data: UK <a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" style="color:var(--accent2)">Environment Agency</a> · Ireland <a href="https://erddap.marine.ie" style="color:var(--accent2)">Marine Institute</a>.
+    Tide data: UK <a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" style="color:var(--accent2)">Environment Agency</a> · Ireland <a href="https://erddap.marine.ie" style="color:var(--accent2)">Marine Institute</a> · Queensland <a href="https://www.data.qld.gov.au/dataset/coastal-data-system-near-real-time-storm-tide-data" style="color:var(--accent2)">Queensland Government</a>.
     Radio: Highland Radio, Letterkenny, Co. Donegal — streamed directly from their public stream to your browser; nothing is rebroadcast.
     Everything runs client-side; no server, no tracking. Made in Donegal.
   </p>
@@ -381,9 +389,12 @@ async function initAudio() {
   sendStretch(); sendGlide();
 }
 
+let tideFrac = 0.5;            // 1 = high water, 0 = tide fully out — drives the pixel sea
 function sendStretch() {
   const v = sliderToStretch(+$('stretch').value);
   $('stretchVal').textContent = v.toFixed(1);
+  const lo = +$('tideMin').value, hi = +$('tideMax').value;
+  if (hi > lo) tideFrac = Math.min(1, Math.max(0, (hi - v) / (hi - lo)));
   if (node) node.port.postMessage({ t: 'stretch', v });
 }
 function sendGlide() { if (node) node.port.postMessage({ t: 'glide', v: +$('glide').value }); }
@@ -514,7 +525,9 @@ drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) loadFile(e.dat
 // tabs, and this is meant to be left running in one.
 let tideMode = 'off';                  // 'off' | 'sim' | 'live'
 let tideStart = 0;
-let live = { lastPoll: 0, station: 'uk:E70039', name: 'Lowestoft (UK)' };
+let live = { lastPoll: 0, station: 'ie:Killybegs Port', name: 'Killybegs Port (IE)' };
+const QLD = 'https://www.data.qld.gov.au/api/3/action';
+const QLD_RES = '7afe7233-fae0-4024-bc98-3a72f05675bd';   // Coastal Data System — near real time storm tide
 const EA = 'https://environment.data.gov.uk/flood-monitoring';
 const IE = 'https://erddap.marine.ie/erddap/tabledap/IrishNationalTideGaugeNetwork.json';
 
@@ -532,8 +545,10 @@ function setMode(m) {
 $('btnTide').onclick = () => setMode('sim');
 $('btnLive').onclick = () => setMode('live');
 $('station').onchange = () => {
+  const opt = $('station').selectedOptions[0];
+  if (!opt) return;
   live.station = $('station').value;
-  live.name = $('station').selectedOptions[0].textContent;
+  live.name = opt.textContent;
   live.lastPoll = 0;                        // poll the new station straight away
 };
 
@@ -572,6 +587,17 @@ async function loadStations() {
     const names = [...new Set(d.table.rows.map(r => r[0]))].sort();
     addStationGroup('Ireland', names.map(n => [n + ' (IE)', 'ie:' + n]));
   } catch (e) { /* Irish feed unavailable — UK list still works */ }
+  // Australia: Queensland Government storm tide gauges
+  try {
+    const sql = 'SELECT DISTINCT "Site" FROM "' + QLD_RES + '" ORDER BY "Site"';
+    const d = await (await fetch(QLD + '/datastore_search_sql?sql=' + encodeURIComponent(sql))).json();
+    const opts = d.result.records.map(r => {
+      const id = r.Site;
+      const label = id.charAt(0).toUpperCase() + id.slice(1) + ' (AU)';
+      return [label, 'au:' + id];
+    });
+    addStationGroup('Australia — Queensland', opts);
+  } catch (e) { /* Queensland feed unavailable */ }
 }
 
 // One code path for both feeds: fetch the last ~25 h of levels,
@@ -588,6 +614,19 @@ async function readTide() {
     const vals = rows.map(r => r[2]);
     const last = rows[rows.length - 1];
     return { min: Math.min(...vals), max: Math.max(...vals), level: last[2], time: last[1] };
+  }
+  if (src === 'au') {
+    // 10-minute readings; 150 ≈ last 25 h. -99 is their missing-data sentinel.
+    const q = QLD + '/datastore_search?resource_id=' + QLD_RES +
+      '&filters=' + encodeURIComponent(JSON.stringify({ Site: id })) +
+      '&sort=' + encodeURIComponent('Seconds desc') + '&limit=150';
+    const d = await (await fetch(q)).json();
+    const recs = (d.result.records || [])
+      .map(r => ({ v: parseFloat(r['Water Level']), t: r.DateTime }))
+      .filter(r => isFinite(r.v) && r.v > -90);
+    if (recs.length < 10) throw new Error('too few readings');
+    const vals = recs.map(r => r.v);
+    return { min: Math.min(...vals), max: Math.max(...vals), level: recs[0].v, time: recs[0].t + '+10:00' };
   }
   const d = await (await fetch(EA + '/id/stations/' + id + '/readings?_sorted&_limit=100')).json();
   const items = (d.items || []).filter(x => typeof x.value === 'number');
@@ -627,6 +666,77 @@ setInterval(() => {
     pollTide();
   }
 }, 1000);
+
+// --- retro pixel sea ---
+// Procedural dithered wave in the spirit of a 90s 256-colour GIF: a tiny
+// 240x72 canvas, a fixed 14-colour washed palette, 4x4 Bayer ordered
+// dithering, ~10 fps. The sea obeys the piece: wave size follows the tide
+// (tideFrac) and animation speed follows the current stretch — at 30x the
+// picture nearly freezes with the sound.
+const wv = $('wave'), WVW = 240, WVH = 72;
+const wctx = wv.getContext('2d');
+const wimg = wctx.createImageData(WVW, WVH);
+const PAL = [
+  [244, 250, 252], [214, 236, 244], [176, 214, 234], [130, 184, 216], [96, 156, 200],
+  [224, 248, 240], [150, 224, 200], [96, 200, 172], [56, 172, 146], [32, 140, 122],
+  [30, 110, 140], [22, 84, 118], [16, 60, 96], [12, 42, 72],
+];
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v / 16 - 0.5) * 30);
+let wt = 0;
+function drawWave() {
+  const d = wimg.data;
+  const horizon = 34 - tideFrac * 9;                     // tide in -> more sea
+  const A = 8 + 16 * tideFrac;                            // wave size follows tide
+  const cx = ((wt * 9) % (WVW + 120)) - 60;               // crest rolls across
+  for (let x = 0; x < WVW; x++) {
+    const bulge = A * Math.exp(-(((x - cx) / 20) ** 2));
+    const ripple = 1.6 * Math.sin(x * 0.13 + wt * 1.1) + 1.2 * Math.sin(x * 0.045 - wt * 0.6);
+    const surf = horizon - bulge - ripple;
+    for (let y = 0; y < WVH; y++) {
+      let r, g, b;
+      if (y < surf) {
+        // washed sky with drifting cloud banks
+        const t = y / Math.max(surf, 1);
+        r = 244 - 114 * t; g = 250 - 66 * t; b = 252 - 36 * t;
+        const cl = 0.5 + 0.5 * Math.sin(x * 0.05 + wt * 0.13 + 2.5 * Math.sin(y * 0.22 + x * 0.01));
+        if (cl > 0.52) { const w = (cl - 0.52) * 1.6; r += (250 - r) * w; g += (252 - g) * w; b += (252 - b) * w; }
+        // spray above a big crest
+        if (bulge > A * 0.5 && surf - y < bulge * 0.5) {
+          const h = Math.sin(x * 12.9898 + Math.floor(y * 0.7) * 78.233 + Math.floor(wt * 2)) * 43758.5;
+          if (h - Math.floor(h) > 0.72) { r = 246; g = 252; b = 250; }
+        }
+      } else {
+        const depth = Math.min(1, (y - surf) / (WVH - horizon));
+        // teal surface fading to deep blue
+        r = 70 - 56 * depth; g = 196 - 152 * depth; b = 172 - 96 * depth;
+        // lit face of the breaking wave
+        const face = bulge / A;
+        if (face > 0.25 && x < cx && y - surf < bulge * 1.2) {
+          const w = (face - 0.25) * 1.1;
+          r += 70 * w; g += 52 * w; b += 20 * w;
+        }
+        // foam at the crest and scattered streaks on the surface
+        if (y - surf < 2.5 && (bulge > A * 0.45 || Math.sin(x * 0.7 + wt * 1.7) > 0.82)) { r = 240; g = 250; b = 246; }
+      }
+      const dith = BAYER[(x & 3) + ((y & 3) << 2)];
+      r += dith; g += dith; b += dith;
+      // nearest colour in the fixed palette
+      let bi = 0, bd = 1e9;
+      for (let i = 0; i < PAL.length; i++) {
+        const p = PAL[i];
+        const dd = (r - p[0]) * (r - p[0]) + (g - p[1]) * (g - p[1]) * 1.4 + (b - p[2]) * (b - p[2]);
+        if (dd < bd) { bd = dd; bi = i; }
+      }
+      const o = (y * WVW + x) * 4, p = PAL[bi];
+      d[o] = p[0]; d[o + 1] = p[1]; d[o + 2] = p[2]; d[o + 3] = 255;
+    }
+  }
+  wctx.putImageData(wimg, 0, 0);
+  // the sea in the picture slows with the sound
+  wt += 0.1 * (0.15 + 2.2 / Math.max(actualStretch, 1));
+}
+setInterval(drawWave, 100);
+drawWave();
 
 // --- scope drawing ---
 const scope = $('scope');
