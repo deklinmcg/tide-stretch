@@ -241,22 +241,24 @@ class Paulstretch extends AudioWorkletProcessor {
     }
     this.re = new Float32Array(N);
     this.im = new Float32Array(N);
+    this.xfadeGrains = Math.max(4, Math.round(12 * sampleRate / this.H));  // ~12 s crossfade
     this.resetState();
   }
 
   resetState() {
     const chs = this.mode === 'live' ? 1 : (this.src ? Math.min(this.src.length, 2) : 2);
     this.olap = []; this.fifo = [];
+    this.xfade = null;
     for (let c = 0; c < chs; c++) {
       this.olap.push(new Float32Array(this.N));
       this.fifo.push(new Ring(this.N * 8 + 65536));
     }
   }
 
-  grain() {
+  addGrain(pos, gain) {
     const N = this.N, H = this.H;
     const chs = this.fifo.length;
-    const p = Math.floor(this.position);
+    const p = Math.floor(pos);
     for (let c = 0; c < chs; c++) {
       const re = this.re, im = this.im;
       if (this.mode === 'live') {
@@ -278,8 +280,24 @@ class Paulstretch extends AudioWorkletProcessor {
       }
       re[H] = Math.hypot(re[H], im[H]); im[H] = 0;
       this.fft(re, im, true);
+      const o = this.olap[c];
+      for (let i = 0; i < N; i++) o[i] += gain * re[i] * this.win[i];
+    }
+  }
+
+  grain() {
+    const N = this.N, H = this.H;
+    if (this.xfade) {
+      // two playheads dissolving into each other (equal-power)
+      const th = this.xfade.w * Math.PI / 2;
+      this.addGrain(this.position, Math.cos(th));
+      this.addGrain(this.xfade.pos, Math.sin(th));
+    } else {
+      this.addGrain(this.position, 1);
+    }
+    const chs = this.fifo.length;
+    for (let c = 0; c < chs; c++) {
       const o = this.olap[c], f = this.fifo[c];
-      for (let i = 0; i < N; i++) o[i] += re[i] * this.win[i];
       for (let j = 0; j < H; j++) f.push(o[j] / this.norm[j]);
       o.copyWithin(0, H); o.fill(0, H);
     }
@@ -288,20 +306,34 @@ class Paulstretch extends AudioWorkletProcessor {
     const k = 1 - Math.exp(-grainDur / Math.max(this.glide, 0.05));
     this.stretch += (this.target - this.stretch) * k;
     const adv = H / this.stretch;
-    if (this.mode === 'live') this.position += adv;                  // no loop — crawls behind the stream
-    else this.position = (this.position + adv) % this.src[0].length;
+    if (this.mode === 'live') {
+      this.position += adv;                              // no loop — crawls behind the stream
+      if (this.xfade) {
+        this.xfade.pos += adv;
+        this.xfade.w += 1 / this.xfadeGrains;
+        if (this.xfade.w >= 1) { this.position = this.xfade.pos; this.xfade = null; }
+      }
+    } else {
+      this.position = (this.position + adv) % this.src[0].length;
+    }
   }
 
   keepAhead() {
-    // If the ring buffer has lapped the playhead, don't let the stream drag
-    // it along at ~1x (which quietly destroys the stretch) — jump forward to
-    // a 60%-of-buffer lag and keep stretching honestly from there. The skip
-    // lands on a grain boundary, so the phase smearing hides it.
-    const C = this.cap;
-    const minPos = this.wAbs - C + 2 * this.N;
-    if (this.position < minPos) {
-      this.position = this.wAbs > C ? this.wAbs - Math.floor(C * 0.6) : Math.max(0, minPos);
+    // The playhead falls behind the live stream and would eventually be
+    // lapped by the ring buffer — at which point it gets dragged along at
+    // ~1x and the stretch quietly collapses. Well before that happens,
+    // start a slow two-playhead crossfade to a fresher point (60%-of-buffer
+    // lag): the old drone dissolves into the new one over ~12 s.
+    const C = this.cap, H = this.H;
+    const margin = this.xfadeGrains * H + 4 * this.N;    // room to finish the fade
+    if (!this.xfade && margin < C * 0.35 &&
+        this.position < this.wAbs - C + margin) {
+      this.xfade = { pos: Math.max(0, this.wAbs - Math.floor(C * 0.6)), w: 0 };
     }
+    // absolute backstop — never read samples the ring has overwritten
+    const minPos = this.wAbs - C + 2 * this.N;
+    if (this.position < minPos) this.position = Math.max(0, minPos);
+    if (this.xfade && this.xfade.pos < minPos) this.xfade.pos = minPos;
   }
 
   canGrain() {
