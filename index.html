@@ -215,9 +215,7 @@ class Paulstretch extends AudioWorkletProcessor {
           const d = m.data, C = this.cap;
           for (let i = 0; i < d.length; i++) this.lbuf[(this.wAbs + i) % C] = d[i];
           this.wAbs += d.length;
-          // if the ring lapped the playhead, drag it forward
-          const minPos = this.wAbs - C + 2 * this.N;
-          if (this.position < minPos) this.position = Math.max(0, minPos);
+          this.keepAhead();
         }
       }
       else if (m.t === 'play') this.playing = true;
@@ -294,6 +292,18 @@ class Paulstretch extends AudioWorkletProcessor {
     else this.position = (this.position + adv) % this.src[0].length;
   }
 
+  keepAhead() {
+    // If the ring buffer has lapped the playhead, don't let the stream drag
+    // it along at ~1x (which quietly destroys the stretch) — jump forward to
+    // a 60%-of-buffer lag and keep stretching honestly from there. The skip
+    // lands on a grain boundary, so the phase smearing hides it.
+    const C = this.cap;
+    const minPos = this.wAbs - C + 2 * this.N;
+    if (this.position < minPos) {
+      this.position = this.wAbs > C ? this.wAbs - Math.floor(C * 0.6) : Math.max(0, minPos);
+    }
+  }
+
   canGrain() {
     if (this.mode === 'live') return this.lbuf && Math.floor(this.position) + this.N <= this.wAbs;
     return !!this.src;
@@ -307,8 +317,7 @@ class Paulstretch extends AudioWorkletProcessor {
       const C = this.cap, a = inp[0], b = inp.length > 1 ? inp[1] : inp[0];
       for (let i = 0; i < a.length; i++) this.lbuf[(this.wAbs + i) % C] = (a[i] + b[i]) * 0.5;
       this.wAbs += a.length;
-      const minPos = this.wAbs - C + 2 * this.N;
-      if (this.position < minPos) this.position = Math.max(0, minPos);
+      this.keepAhead();
     }
     const out = outputs[0];
     const n = out[0].length;
