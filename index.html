@@ -57,12 +57,22 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   label.small { font-size: 12px; color: var(--dim); }
   canvas { width: 100%; height: 110px; display: block; border-radius: 8px; background: #0d141c; margin-top: 12px; }
+  #waveWrap { position: relative; margin-bottom: 18px; }
   #wave {
     width: 100%; height: auto; display: block;
     image-rendering: pixelated;
     border-radius: 12px; border: 1px solid var(--line);
-    margin-bottom: 18px;
   }
+  #btnFull {
+    position: absolute; right: 10px; bottom: 10px;
+    padding: 4px 10px; font-size: 12px;
+    background: rgba(10, 20, 30, 0.55); border: 1px solid rgba(255,255,255,0.25);
+    color: #e8f4f8; opacity: 0.7;
+  }
+  #btnFull:hover { opacity: 1; }
+  #waveWrap:fullscreen { background: #000; cursor: none; }
+  #waveWrap:fullscreen #wave { width: 100vw; height: 100vh; border: none; border-radius: 0; }
+  #waveWrap:fullscreen #btnFull { cursor: pointer; }
   .status { font-size: 12px; color: var(--dim); margin-top: 10px; min-height: 16px; }
   .status b { color: var(--text); font-weight: 500; }
   .meter { height: 4px; background: #0d141c; border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -76,7 +86,10 @@
   <h1>Tide <span>Stretch</span></h1>
   <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Start the radio (or drop a file in), press play, switch the live tide on, and leave it running.</p>
 
-  <canvas id="wave" width="240" height="72"></canvas>
+  <div id="waveWrap">
+    <canvas id="wave" width="240" height="72"></canvas>
+    <button id="btnFull" title="full screen — sound keeps playing, Esc to come back">⛶ full screen</button>
+  </div>
 
   <div class="panel">
     <h2>Source sound</h2>
@@ -714,9 +727,25 @@ setInterval(() => {
 // dithering, ~10 fps. The sea obeys the piece: wave size follows the tide
 // (tideFrac) and animation speed follows the current stretch — at 30x the
 // picture nearly freezes with the sound.
-const wv = $('wave'), WVW = 240, WVH = 72;
+const wv = $('wave'), WVW = 240;
+let WVH = 72;
 const wctx = wv.getContext('2d');
-const wimg = wctx.createImageData(WVW, WVH);
+let wimg = wctx.createImageData(WVW, WVH);
+
+// full screen: the sea fills the display (audio is untouched — it lives in
+// the audio graph, not the picture). Esc or the button comes back.
+$('btnFull').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else $('waveWrap').requestFullscreen().catch(() => {});
+};
+document.addEventListener('fullscreenchange', () => {
+  const fs = document.fullscreenElement === $('waveWrap');
+  WVH = fs ? Math.max(72, Math.round(WVW * screen.height / screen.width)) : 72;
+  wv.width = WVW; wv.height = WVH;
+  wimg = wctx.createImageData(WVW, WVH);
+  $('btnFull').textContent = fs ? '⛶ exit (or Esc)' : '⛶ full screen';
+  drawWave();
+});
 const PAL = [
   [244, 250, 252], [214, 236, 244], [176, 214, 234], [130, 184, 216], [96, 156, 200],
   [224, 248, 240], [150, 224, 200], [96, 200, 172], [56, 172, 146], [32, 140, 122],
@@ -726,12 +755,12 @@ const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v
 let wt = 0;
 function drawWave() {
   const d = wimg.data;
-  const horizon = 34 - tideFrac * 9;                     // tide in -> more sea
-  const A = 8 + 16 * tideFrac;                            // wave size follows tide
+  const horizon = WVH * (0.47 - tideFrac * 0.125);        // tide in -> more sea
+  const A = WVH * (0.11 + 0.22 * tideFrac);               // wave size follows tide
   const cx = ((wt * 9) % (WVW + 120)) - 60;               // crest rolls across
   for (let x = 0; x < WVW; x++) {
     const bulge = A * Math.exp(-(((x - cx) / 20) ** 2));
-    const ripple = 1.6 * Math.sin(x * 0.13 + wt * 1.1) + 1.2 * Math.sin(x * 0.045 - wt * 0.6);
+    const ripple = (WVH / 72) * (1.6 * Math.sin(x * 0.13 + wt * 1.1) + 1.2 * Math.sin(x * 0.045 - wt * 0.6));
     const surf = horizon - bulge - ripple;
     for (let y = 0; y < WVH; y++) {
       let r, g, b;
