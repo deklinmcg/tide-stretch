@@ -19,7 +19,7 @@ The original piece — Highland Radio (Letterkenny) on the Donegal tide — is s
 2. Tap a tide-gauge dot — the local station tunes in (~10 s of buffering) and drifts on that tide
 3. Leave it running — the change happens on tidal time
 4. **● REC** (in the ticker) samples up to 60 s of whatever you're hearing and downloads it as a WAV — drop it straight into a sampler
-5. `lab` (bottom right) opens the manual workbench: stretch any audio file by hand or on a simulated tide
+5. **☰** (top right) opens the sidebar: filter the world's gauges by genre, continent, country, or where the tide is right now; play the effects (an XY pad with assignable axes — lowpass, highpass, reverb, delay, drive); and use the lab — stretch any audio file by hand or on a simulated tide
 
 ## How it works
 
@@ -28,6 +28,7 @@ One HTML file + two JSON data files, no server, no build, no tracking:
 - **Paulstretch in an AudioWorklet** — windows of sound are FFT'd, their phases randomised, inverse-FFT'd and overlap-added. Stretch ratio is a live parameter that glides on a ~15 s time constant. The worklet keeps a 5-minute rolling buffer of the incoming stream.
 - **Radio streams** — three transports, all decoded in the browser: HLS playlists of AAC segments, icecast MP3, and icecast ADTS-AAC (the icecast streams are chunk-decoded on frame boundaries, with the previous chunk's tail prepended as decoder warm-up so the seams vanish inside the smear).
 - **Tide data** — global: [IOC Sea Level Monitoring](https://www.ioc-sealevelmonitoring.org); UK: [Environment Agency](https://environment.data.gov.uk/flood-monitoring/doc/reference); Ireland: [Marine Institute ERDDAP](https://erddap.marine.ie); Australia: [Queensland Government](https://www.data.qld.gov.au/dataset/coastal-data-system-near-real-time-storm-tide-data). Each gauge's last 25 hours self-calibrate its high/low range (2nd–98th percentile); it re-polls every 5 minutes.
+- **Genres** — each station's Radio Browser tags are normalised into ~15 buckets (news & talk, dance & electronic, oldies & gold…) by `tools/fetch_genres.py` and baked into `stations.json`. The tide filter reads gauges live: a few at a time, nearest to your view, cached 20 minutes.
 - **Radio pairing** (`stations.json`) — built offline by `tools/pair_radio.py`: for every live gauge it queries the [Radio Browser](https://www.radio-browser.info) community directory by distance, filters out national networks, tests each candidate stream for HTTPS + CORS + a decodable codec, and keeps the nearest *real* station (most-voted within ~40 km of the nearest working one, so a proper local FM station beats a hobby web stream tagged at a nearby village). Gauges with no reachable stream fall back to synthesised wave noise.
 - **The map** — Natural Earth 110 m coastlines scanline-rasterised onto a ~320-px-wide logical grid, drawn with a fixed 17-colour washed palette and 4×4 Bayer ordered dithering over a procedurally animated ocean. The sea's wave size follows the tide; its animation speed follows the current stretch.
 

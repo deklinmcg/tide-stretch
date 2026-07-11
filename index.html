@@ -87,13 +87,6 @@
     border-radius: 8px; cursor: pointer;
   }
   #zoomCtl button:hover { border-color: var(--accent); color: var(--accent); }
-  #labLink {
-    position: absolute; bottom: calc(var(--tick-h) + 8px); right: 12px; z-index: 4;
-    color: var(--dim); font-size: 11px; text-decoration: none;
-    background: rgba(10,20,30,.5); border: 1px solid var(--line);
-    border-radius: 6px; padding: 3px 9px; cursor: pointer;
-  }
-  #labLink:hover { color: var(--accent); border-color: var(--accent); }
   #hint {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
     pointer-events: none; text-align: center; z-index: 3;
@@ -143,15 +136,39 @@
   #tickerText b { color: var(--accent); font-weight: 600; }
   #tickerText .sep { color: #33475a; padding: 0 14px; }
 
-  /* ---------- lab (the old controls) ---------- */
-  #labScreen {
-    position: fixed; inset: 0; bottom: var(--tick-h); z-index: 20; display: none;
-    overflow-y: auto; background: rgba(11,16,22,.97); padding: 24px 16px 60px;
+  /* ---------- sidebar (filters, FX, the lab) ---------- */
+  #side {
+    position: fixed; top: 0; right: 0; bottom: var(--tick-h); z-index: 20;
+    width: min(350px, 100vw); display: none;
+    overflow-y: auto; overscroll-behavior: contain;
+    background: rgba(9,14,20,.97); border-left: 1px solid var(--line);
+    padding: 14px 14px 40px;
   }
-  #labScreen .wrap { max-width: 680px; margin: 0 auto; }
-  #labScreen h1 { font-size: 18px; margin-bottom: 4px; }
-  #labScreen h1 span { color: var(--accent); }
-  #labScreen .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; }
+  #side.open { display: block; }
+  #side h1 { font-size: 15px; margin: 2px 0 12px; letter-spacing: 1.5px; }
+  #side h1 span { color: var(--accent); }
+  #btnSide {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px; z-index: 21;
+    background: rgba(10,20,30,.65); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 12px; font-size: 15px; cursor: pointer;
+  }
+  #btnSide:hover, #btnSide.open { border-color: var(--accent); color: var(--accent); }
+  .frow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .frow label { flex: 0 0 74px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; }
+  .frow select { flex: 1 1 auto; min-width: 0; }
+  #fltCount { font-size: 11.5px; color: var(--dim); margin-top: 6px; }
+  #fltCount b { color: var(--accent); font-weight: 600; }
+  #fltClear { font-size: 11px; padding: 4px 10px; }
+  /* XY pad */
+  #xy {
+    width: 100%; height: 170px; display: block; border-radius: 8px;
+    background: #0d141c; border: 1px solid var(--line); cursor: crosshair;
+    touch-action: none; margin-top: 10px;
+  }
+  .xysel { display: flex; gap: 8px; margin-top: 8px; }
+  .xysel label { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 5px; flex: 1; }
+  .xysel select { flex: 1; min-width: 0; }
+  #fxRead { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 14px; font-variant-numeric: tabular-nums; }
   .panel {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 12px; padding: 18px; margin-bottom: 16px;
@@ -212,14 +229,14 @@
       <p class="fine">1,305 gauges · 94 countries · every one paired with a genuinely local station. Sound: paulstretch, running in your browser. Nothing is recorded or rebroadcast — streams play straight from each station to you. Made in Donegal.</p>
     </div>
   </div>
-  <button id="btnBack">◀ world</button>
+  <button id="btnBack" style="right:64px">◀ world</button>
+  <button id="btnSide" title="filters, effects & the lab">☰</button>
   <div id="hint">tap a coastline to dive in — every white dot is a <span class="k">tide gauge</span>,<br>and its nearest local radio plays at the pace of its sea</div>
   <div id="tip"></div>
   <div id="zoomCtl">
     <button id="btnZin" title="zoom in">+</button>
     <button id="btnZout" title="zoom out">−</button>
   </div>
-  <a id="labLink">lab</a>
 </div>
 
 <div id="ticker">
@@ -229,11 +246,44 @@
   <button id="btnRec" title="record up to 60 s of what you hear and download it as a WAV"><span class="dot">●</span> REC</button>
 </div>
 
-<div id="labScreen">
+<div id="side">
   <div class="wrap">
-    <button id="btnLabClose">✕ back to the map</button>
-    <h1>Tidal <span>Wave</span> — lab</h1>
-    <p class="sub">Manual controls: stretch any audio file by hand or on a simulated tide. The live map is the main piece — this is the workbench it grew out of.</p>
+    <button id="btnLabClose" style="float:right" class="b">✕</button>
+    <h1>Tidal <span>Wave</span></h1>
+
+    <div class="panel">
+      <h2>Filter the world</h2>
+      <div class="frow"><label>genre</label><select id="fGenre"><option value="">all genres</option></select></div>
+      <div class="frow"><label>continent</label><select id="fCont"><option value="">all continents</option></select></div>
+      <div class="frow"><label>country</label><select id="fCC"><option value="">all countries</option></select></div>
+      <div class="frow"><label>tide</label>
+        <select id="fTide">
+          <option value="">any tide</option>
+          <option value="high">high water</option>
+          <option value="low">tide out</option>
+          <option value="rising">rising</option>
+          <option value="falling">falling</option>
+        </select>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <span id="fltCount"></span>
+        <button class="b" id="fltClear">clear</button>
+      </div>
+      <div class="note" id="tideNote" style="display:none">Tide states load a few gauges at a time as you explore — dimmed dots are still being read.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Effects</h2>
+      <canvas id="xy"></canvas>
+      <div class="xysel">
+        <label>x <select id="xParam"></select></label>
+        <label>y <select id="yParam"></select></label>
+      </div>
+      <div id="fxRead"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="b" id="fxReset">reset FX</button>
+      </div>
+    </div>
 
     <div class="panel">
       <h2>Source sound</h2>
@@ -586,9 +636,11 @@ async function initAudio() {
   node.onprocessorerror = () => console.log('[engine] worklet processor crashed');
   gain = ctx.createGain();
   gain.gain.value = 0.8;
-  node.connect(gain).connect(ctx.destination);
+  buildFX();                                   // gain -> FX chain -> fx.master
+  node.connect(gain);
+  fx.master.connect(ctx.destination);
   tapNode = new AudioWorkletNode(ctx, 'tap');
-  gain.connect(tapNode);
+  fx.master.connect(tapNode);                  // REC hears the FX
   tapNode.connect(ctx.destination);            // outputs silence; keeps it running
   tapNode.port.onmessage = e => recAppend(e.data);
   node.port.onmessage = e => {
@@ -603,6 +655,86 @@ async function initAudio() {
     }
   };
   sendStretch(); sendGlide();
+}
+
+// ---------------------------------------------------------------
+// FX chain: highpass -> lowpass -> drive -> [dry + delay + reverb] -> master
+// Controlled by the XY pad in the sidebar; both axes are assignable.
+// ---------------------------------------------------------------
+const fx = { master: null };
+const FX_PARAMS = {
+  lowpass:  { label: 'lowpass',        min: 200,  max: 20000, log: true,  def: 1,    fmt: v => v >= 1000 ? (v/1000).toFixed(1) + ' kHz' : Math.round(v) + ' Hz' },
+  highpass: { label: 'highpass',       min: 20,   max: 4000,  log: true,  def: 0,    fmt: v => v >= 1000 ? (v/1000).toFixed(1) + ' kHz' : Math.round(v) + ' Hz' },
+  reverb:   { label: 'reverb',         min: 0,    max: 1,     log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
+  delay:    { label: 'delay mix',      min: 0,    max: 1,     log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
+  dtime:    { label: 'delay time',     min: 0.06, max: 1.2,   log: false, def: 0.33, fmt: v => v.toFixed(2) + ' s' },
+  dfb:      { label: 'delay feedback', min: 0,    max: 0.85,  log: false, def: 0.41, fmt: v => Math.round(v*100) + '%' },
+  drive:    { label: 'drive',          min: 0,    max: 1,     log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
+};
+const fxVal = {};                                  // param -> normalised 0..1
+for (const k in FX_PARAMS) fxVal[k] = FX_PARAMS[k].def;
+function fxReal(k) {
+  const p = FX_PARAMS[k], t = fxVal[k];
+  return p.log ? p.min * Math.pow(p.max / p.min, t) : p.min + (p.max - p.min) * t;
+}
+
+function driveCurve(amount) {
+  const n = 1024, c = new Float32Array(n);
+  const k = 1 + amount * 40;
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(k * x) / Math.tanh(k);
+  }
+  return c;
+}
+
+function buildFX() {
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.Q.value = 0.71;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.71;
+  const shaper = ctx.createWaveShaper(); shaper.curve = driveCurve(0); shaper.oversample = '2x';
+  const master = ctx.createGain();
+  const dry = ctx.createGain(); dry.gain.value = 1;
+  // delay with damped feedback
+  const dSend = ctx.createGain(); dSend.gain.value = 0;
+  const delay = ctx.createDelay(2.0);
+  const fb = ctx.createGain();
+  const damp = ctx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 3200;
+  // big-hall reverb: 5 s exponential-decay noise IR
+  const rSend = ctx.createGain(); rSend.gain.value = 0;
+  const conv = ctx.createConvolver();
+  const irLen = Math.floor(ctx.sampleRate * 5);
+  const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.6);
+  }
+  conv.buffer = ir;
+
+  gain.connect(hp); hp.connect(lp); lp.connect(shaper);
+  shaper.connect(dry); dry.connect(master);
+  shaper.connect(dSend); dSend.connect(delay); delay.connect(master);
+  delay.connect(fb); fb.connect(damp); damp.connect(delay);
+  shaper.connect(rSend); rSend.connect(conv); conv.connect(master);
+
+  Object.assign(fx, { hp, lp, shaper, master, dry, dSend, delay, fb, rSend });
+  for (const k in FX_PARAMS) applyFX(k);
+}
+
+let lastDrive = -1;
+function applyFX(k) {
+  if (!fx.master) return;
+  const v = fxReal(k), t = ctx.currentTime;
+  if (k === 'lowpass') fx.lp.frequency.setTargetAtTime(v, t, 0.03);
+  else if (k === 'highpass') fx.hp.frequency.setTargetAtTime(v, t, 0.03);
+  else if (k === 'reverb') fx.rSend.gain.setTargetAtTime(v * 1.2, t, 0.05);
+  else if (k === 'delay') fx.dSend.gain.setTargetAtTime(v, t, 0.05);
+  else if (k === 'dtime') fx.delay.delayTime.setTargetAtTime(v, t, 0.12);
+  else if (k === 'dfb') fx.fb.gain.setTargetAtTime(fxVal.dfb * 0.85, t, 0.05);
+  else if (k === 'drive') {
+    const q = Math.round(fxVal.drive * 40);
+    if (q !== lastDrive) { lastDrive = q; fx.shaper.curve = driveCurve(fxVal.drive); }
+    fx.dry.gain.setTargetAtTime(1 - fxVal.drive * 0.35, t, 0.05);   // tame the level
+  }
 }
 
 let tideFrac = 0.5;            // 1 = high water, 0 = tide fully out — drives the pixel sea
@@ -1332,12 +1464,18 @@ function drawDots() {
   if (!DATA) return;
   const zoomed = viewLevel === 1;
   const pulse = (Math.sin(mt * 2.2) + 1) / 2;
+  const filtering = flt.genre || flt.cont || flt.cc || flt.tide;
   for (const s of DATA.stations) {
     const [x, y] = proj(s.lon, s.lat);
     s.px = x; s.py = y;
     if (x < -2 || x > LW + 2 || y < -2 || y > LH + 2) continue;
-    const xi = Math.round(x), yi = Math.round(y);
     const isSel = s === selected;
+    if (filtering && !isSel) {
+      if (!passesFilter(s, true)) continue;                    // hard filters hide
+      if (flt.tide && tideMatch(s) === false) continue;        // known non-match hides
+    }
+    const tideUnknown = flt.tide && tideMatch(s) === null;     // still being read: dim
+    const xi = Math.round(x), yi = Math.round(y);
     const isHov = s === hover;
     // small white gauge dots — faint at world scale, clear once zoomed in
     if (isSel) {
@@ -1351,12 +1489,12 @@ function drawDots() {
       mctx.fillRect(xi, yi - 1, 1, 3);
       mctx.fillStyle = '#ffffff';
       mctx.fillRect(xi, yi, 1, 1);
-    } else if (zoomed) {
-      mctx.fillStyle = 'rgba(255,255,255,' + (0.75 + 0.25 * pulse) + ')';
+    } else if (zoomed || filtering) {
+      mctx.fillStyle = 'rgba(255,255,255,' + (tideUnknown ? 0.2 : 0.75 + 0.25 * pulse) + ')';
       mctx.fillRect(xi, yi, 1, 1);
     }
-    // world view: no dots — the coast glow is the invitation; zooming in
-    // reveals the gauges
+    // unfiltered world view: no dots — the coast glow is the invitation;
+    // zooming in (or filtering) reveals the gauges
   }
 }
 
@@ -1523,6 +1661,7 @@ function nearestStation(x, y, maxPx) {
   if (!DATA) return null;
   let best = null, bd = maxPx * maxPx;
   for (const s of DATA.stations) {
+    if (!passesFilter(s)) continue;
     const dx = s.px - x, dy = s.py - y;
     const dd = dx * dx + dy * dy;
     if (dd < bd) { bd = dd; best = s; }
@@ -1593,7 +1732,7 @@ map.addEventListener('mousemove', (ev) => {
     tip.style.left = Math.min(r.width - 270, st.px / LW * r.width + 12) + 'px';
     tip.style.top = Math.max(6, st.py / LH * r.height - 14) + 'px';
     tip.innerHTML = '<b>' + esc(st.name) + '</b> — ' + esc(countryName(st.country)) +
-      '<div class="r">' + (st.radio ? '📻 ' + esc(st.radio.name) + (st.radio.dist_km > 0 ? ' · ' + st.radio.dist_km + ' km away' : '') : '📻 nearest reachable station') + '</div>';
+      '<div class="r">' + (st.radio ? '📻 ' + esc(st.radio.name) + (st.radio.dist_km > 0 ? ' · ' + st.radio.dist_km + ' km away' : '') + (st.radio.genre ? ' · ' + esc(st.radio.genre) : '') : '📻 nearest reachable station') + '</div>';
     map.style.cursor = 'pointer';
   } else {
     tip.style.display = 'none';
@@ -1636,10 +1775,212 @@ function applyHash() {
 }
 
 // ---------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------
+$('btnSide').onclick = () => {
+  primeAudio();
+  const open = $('side').classList.toggle('open');
+  $('btnSide').classList.toggle('open', open);
+  if (open) { populateFilters(); drawXY(); }
+};
+$('btnLabClose').onclick = () => { $('side').classList.remove('open'); $('btnSide').classList.remove('open'); };
+
+// ---------------------------------------------------------------
+// XY pad — both axes assignable to any FX parameter
+// ---------------------------------------------------------------
+const xy = $('xy');
+let xyAxis = { x: 'lowpass', y: 'reverb' };
+for (const [sel, axis] of [['xParam', 'x'], ['yParam', 'y']]) {
+  const el = $(sel);
+  for (const k in FX_PARAMS) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = FX_PARAMS[k].label;
+    el.appendChild(o);
+  }
+  el.value = xyAxis[axis];
+  el.onchange = () => { xyAxis[axis] = el.value; drawXY(); };
+}
+$('fxReset').onclick = () => {
+  primeAudio();
+  for (const k in FX_PARAMS) { fxVal[k] = FX_PARAMS[k].def; applyFX(k); }
+  drawXY();
+};
+
+function drawXY() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = xy.clientWidth * dpr, h = xy.clientHeight * dpr;
+  if (!w) return;
+  if (xy.width !== w) { xy.width = w; xy.height = h; }
+  const g = xy.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = '#1a2733'; g.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    g.beginPath(); g.moveTo(w * i / 4, 0); g.lineTo(w * i / 4, h); g.stroke();
+    g.beginPath(); g.moveTo(0, h * i / 4); g.lineTo(w, h * i / 4); g.stroke();
+  }
+  const px = fxVal[xyAxis.x] * w, py = (1 - fxVal[xyAxis.y]) * h;
+  g.strokeStyle = 'rgba(95,212,196,.35)';
+  g.beginPath(); g.moveTo(px, 0); g.lineTo(px, h); g.stroke();
+  g.beginPath(); g.moveTo(0, py); g.lineTo(w, py); g.stroke();
+  g.fillStyle = '#5fd4c4';
+  g.beginPath(); g.arc(px, py, 6 * dpr, 0, 7); g.fill();
+  $('fxRead').textContent =
+    FX_PARAMS[xyAxis.x].label + ' ' + FX_PARAMS[xyAxis.x].fmt(fxReal(xyAxis.x)) + '  ·  ' +
+    FX_PARAMS[xyAxis.y].label + ' ' + FX_PARAMS[xyAxis.y].fmt(fxReal(xyAxis.y));
+}
+
+let xyDown = false;
+function xySet(ev) {
+  const r = xy.getBoundingClientRect();
+  const nx = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  const ny = Math.min(1, Math.max(0, 1 - (ev.clientY - r.top) / r.height));
+  fxVal[xyAxis.x] = nx; fxVal[xyAxis.y] = ny;
+  applyFX(xyAxis.x); applyFX(xyAxis.y);
+  drawXY();
+}
+xy.addEventListener('pointerdown', ev => { primeAudio(); xyDown = true; xy.setPointerCapture(ev.pointerId); xySet(ev); });
+xy.addEventListener('pointermove', ev => { if (xyDown) xySet(ev); });
+xy.addEventListener('pointerup', () => { xyDown = false; });
+xy.addEventListener('pointercancel', () => { xyDown = false; });
+
+// ---------------------------------------------------------------
+// Filters: genre / continent / country / tide state
+// ---------------------------------------------------------------
+const CONTINENT = {
+  EU: 'IE GB FR ES PT IT DE NL BE DK SE NO FI IS PL RU EE LV LT GR HR SI ME AL UA BG RO MT CY TR GE MC MNC GI FO',
+  AF: 'MA DZ TN LY EG SN GH NG CM GA AO NA ZA MZ TZ KE SO DJ SD MG KM MU SC CV RE YT',
+  AS: 'IL SA YE OM AE QA BH KW IQ IR PK IN LK BD MM TH MY SG VN KH CN KR KP JP HK MO BN ID PH TW MV TL',
+  NA: 'US CA MX GT BZ SV HN NI CR PA CU JM HT DO PR TT BB BS GP MQ KY AW CW BM GL',
+  SA: 'CL PE EC CO VE GY SR BR AR UY GF',
+  OC: 'AU NZ PG SB VU FJ TO WS KI TV NR MH FM PW CK NU NC PF WF',
+  AN: 'ANT ATA',
+};
+const CONT_NAME = { EU: 'Europe', AF: 'Africa', AS: 'Asia', NA: 'North America', SA: 'South America', OC: 'Oceania & Pacific', AN: 'Antarctica' };
+const ccCont = {};
+for (const [cont, list] of Object.entries(CONTINENT)) for (const cc of list.split(' ')) ccCont[cc] = cont;
+
+const flt = { genre: '', cont: '', cc: '', tide: '' };
+let filtersReady = false;
+
+function populateFilters() {
+  if (!DATA || filtersReady) { refreshCountryList(); return; }
+  filtersReady = true;
+  const genres = {};
+  for (const s of DATA.stations) if (s.radio && s.radio.genre) genres[s.radio.genre] = (genres[s.radio.genre] || 0) + 1;
+  for (const g of Object.keys(genres).sort()) {
+    const o = document.createElement('option');
+    o.value = g; o.textContent = g + ' (' + genres[g] + ')';
+    $('fGenre').appendChild(o);
+  }
+  const conts = new Set(DATA.stations.map(s => ccCont[s.country]).filter(Boolean));
+  for (const c of ['EU', 'AF', 'AS', 'NA', 'SA', 'OC', 'AN']) {
+    if (!conts.has(c)) continue;
+    const o = document.createElement('option');
+    o.value = c; o.textContent = CONT_NAME[c];
+    $('fCont').appendChild(o);
+  }
+  refreshCountryList();
+  updateFltCount();
+}
+window.addEventListener('resize', () => { if ($('side').classList.contains('open')) drawXY(); });
+
+function refreshCountryList() {
+  if (!DATA) return;
+  const keep = $('fCC').value;
+  $('fCC').innerHTML = '<option value="">all countries</option>';
+  const ccs = [...new Set(DATA.stations.map(s => s.country))]
+    .filter(cc => !flt.cont || ccCont[cc] === flt.cont)
+    .sort((a, b) => countryName(a).localeCompare(countryName(b)));
+  for (const cc of ccs) {
+    const o = document.createElement('option');
+    o.value = cc; o.textContent = countryName(cc);
+    $('fCC').appendChild(o);
+  }
+  $('fCC').value = ccs.includes(keep) ? keep : '';
+  flt.cc = $('fCC').value;
+}
+
+// tide states: cached per gauge, fetched lazily for gauges in view
+const tideStates = new Map();        // key src:id -> {pos:'high|mid|low', dir:'rising|falling', t}
+let tsInFlight = 0;
+function tideKey(s) { return s.src + ':' + s.id; }
+function classifyTide(t) {
+  const frac = Math.min(1, Math.max(0, (t.level - t.min) / Math.max(t.max - t.min, 0.01)));
+  return {
+    pos: frac >= 0.62 ? 'high' : frac <= 0.38 ? 'low' : 'mid',
+    dir: t.prev == null || t.level >= t.prev ? 'rising' : 'falling',
+    t: Date.now(),
+  };
+}
+function tideMatch(s) {
+  const st = tideStates.get(tideKey(s));
+  if (!st) return null;                          // unknown yet
+  if (flt.tide === 'high') return st.pos === 'high';
+  if (flt.tide === 'low') return st.pos === 'low';
+  return st.dir === flt.tide;
+}
+function pumpTideStates() {
+  if (!flt.tide || !DATA || tsInFlight >= 6) return;
+  // nearest unknown gauges to the view centre, other filters already applied
+  const cx = LW / 2, cy = LH / 2;
+  const todo = DATA.stations
+    .filter(s => passesFilter(s, true) && s.px > -40 && s.px < LW + 40 && s.py > -40 && s.py < LH + 40)
+    .filter(s => { const st = tideStates.get(tideKey(s)); return !st || Date.now() - st.t > 20 * 60 * 1000; })
+    .sort((a, b) => ((a.px-cx)**2 + (a.py-cy)**2) - ((b.px-cx)**2 + (b.py-cy)**2))
+    .slice(0, 6 - tsInFlight);
+  for (const s of todo) {
+    tsInFlight++;
+    tideStates.set(tideKey(s), { pos: 'mid', dir: 'pending', t: Date.now() });   // claim
+    readTide(s).then(t => tideStates.set(tideKey(s), classifyTide(t)))
+      .catch(() => tideStates.set(tideKey(s), { pos: 'mid', dir: 'unknown', t: Date.now() }))
+      .finally(() => { tsInFlight--; });
+  }
+}
+setInterval(pumpTideStates, 1500);
+
+function passesFilter(s, ignoreTide) {
+  if (flt.genre && (!s.radio || s.radio.genre !== flt.genre)) return false;
+  if (flt.cont && ccCont[s.country] !== flt.cont) return false;
+  if (flt.cc && s.country !== flt.cc) return false;
+  if (!ignoreTide && flt.tide) {
+    const m = tideMatch(s);
+    if (m === false) return false;               // unknown (null) stays visible, dimmed
+  }
+  return true;
+}
+
+function updateFltCount() {
+  if (!DATA) return;
+  const any = flt.genre || flt.cont || flt.cc || flt.tide;
+  if (flt.tide) {
+    let hit = 0, unknown = 0;
+    for (const s of DATA.stations) {
+      if (!passesFilter(s, true)) continue;
+      const m = tideMatch(s);
+      if (m === true) hit++; else if (m === null) unknown++;
+    }
+    $('fltCount').innerHTML = '<b>' + hit + '</b> matching' + (unknown ? ' · ' + unknown + ' still reading' : '');
+  } else {
+    const n = DATA.stations.filter(s => passesFilter(s)).length;
+    $('fltCount').innerHTML = any ? '<b>' + n + '</b> of ' + DATA.stations.length + ' gauges' : DATA.stations.length + ' gauges';
+  }
+  $('tideNote').style.display = flt.tide ? 'block' : 'none';
+}
+setInterval(() => { if (flt.tide && $('side').classList.contains('open')) updateFltCount(); }, 3000);
+
+$('fGenre').onchange = () => { flt.genre = $('fGenre').value; updateFltCount(); };
+$('fCont').onchange = () => { flt.cont = $('fCont').value; refreshCountryList(); updateFltCount(); };
+$('fCC').onchange = () => { flt.cc = $('fCC').value; updateFltCount(); };
+$('fTide').onchange = () => { flt.tide = $('fTide').value; updateFltCount(); pumpTideStates(); };
+$('fltClear').onclick = () => {
+  flt.genre = flt.cont = flt.cc = flt.tide = '';
+  $('fGenre').value = $('fCont').value = $('fTide').value = '';
+  refreshCountryList(); updateFltCount();
+};
+
+// ---------------------------------------------------------------
 // Lab wiring (manual mode)
 // ---------------------------------------------------------------
-$('labLink').onclick = () => { $('labScreen').style.display = 'block'; };
-$('btnLabClose').onclick = () => { $('labScreen').style.display = 'none'; };
 
 async function loadFile(file) {
   await ensureAudio();
@@ -1733,7 +2074,7 @@ setInterval(() => {
 // lab scope
 const scope = $('scope');
 function drawScope(now) {
-  if ($('labScreen').style.display !== 'block') return;
+  if (!$('side').classList.contains('open')) return;
   history.push([now, actualStretch]);
   while (history.length && now - history[0][0] > 120000) history.shift();
   const dpr = window.devicePixelRatio || 1;
