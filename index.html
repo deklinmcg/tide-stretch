@@ -473,13 +473,15 @@ function loadChannels(chData, label) {
 }
 
 // --- live radio (Highland Radio, Letterkenny) ---
-// The MP3 stream is fetched in ~10 s chunks and decoded with the Web Audio
-// decoder, then appended to the worklet's 5-minute rolling ring buffer.
-// The 'Range: bytes=0-' header is essential: without it StreamTheWorld
-// sniffs the request as a scraper and closes the connection immediately.
-// (An <audio>-element route was tried first, but iOS refuses to feed
-// cross-origin element audio into the graph — you hear the raw station.)
-const RADIO_URL = 'https://playerservices.streamtheworld.com/api/livestream-redirect/HIGHLAND_RADIO.mp3';
+// HLS: the master playlist redirects to a per-session playlist of ~10 s
+// AAC segments; each segment is a plain GET (no special headers, so no
+// CORS preflight — Safari-safe), decoded and appended to the worklet's
+// 5-minute rolling ring buffer.
+// History: <audio> element → iOS refuses to route cross-origin element
+// audio into the graph; raw MP3 fetch → StreamTheWorld closes Safari's
+// connections no matter what headers are sent. HLS is what their own
+// player uses, so it works everywhere.
+const RADIO_HLS = 'https://playerservices.streamtheworld.com/api/livestream-redirect/HIGHLAND_RADIOAAC.m3u8';
 let radio = { on: false, ctrl: null, name: 'Highland Radio' };
 
 async function startRadio() {
@@ -496,59 +498,53 @@ async function startRadio() {
     console.log('[radio]', msg);
     if (radio.on && !radio.live) $('srcStatus').textContent = 'radio: ' + msg;
   };
+  const opts = { signal: radio.ctrl.signal, cache: 'no-store' };
   let fails = 0;
-  // The 'Range: bytes=0-' header makes StreamTheWorld accept fetch, but
-  // Safari preflights it (Chrome safelists simple ranges) and the server
-  // fails the preflight — so alternate: any attempt that yields no audio
-  // flips the header for the next try.
-  let useRange = true;
   while (radio.on && fails < 40) {
-    let gotAudio = false;
     try {
       note(fails ? 'reconnecting (attempt ' + (fails + 1) + ')…' : 'connecting…');
-      const opts = { signal: radio.ctrl.signal, cache: 'no-store' };
-      if (useRange) opts.headers = { 'Range': 'bytes=0-' };
-      const resp = await fetch(RADIO_URL, opts);
-      const rdr = resp.body.getReader();
-      let acc = [], accLen = 0, decodeFails = 0;
+      // master playlist -> this session's playlist of ~10 s AAC segments
+      const mResp = await fetch(RADIO_HLS, opts);
+      const master = await mResp.text();
+      const mBase = mResp.url.slice(0, mResp.url.lastIndexOf('/') + 1);
+      let child = master.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#')) || '';
+      if (!child) throw new Error('empty master playlist');
+      if (!/^https?:/.test(child)) child = mBase + child;
+      const cBase = child.slice(0, child.lastIndexOf('/') + 1);
+      let seen = new Set();
       while (radio.on) {
-        const { done, value } = await rdr.read();
-        if (done) { note('stream closed — reconnecting…'); break; }
-        acc.push(value); accLen += value.length;
-        if (!radio.live && accLen > 0 && accLen < 160 * 1024) {
-          note('buffering… ' + Math.round(accLen / 1638) + '%');
-        }
-        if (accLen >= 160 * 1024) {                    // ~10 s at 128 kbps
-          const all = new Uint8Array(accLen); let o = 0;
-          for (const a of acc) { all.set(a, o); o += a.length; }
-          acc = []; accLen = 0;
-          // align to an MP3 frame sync so stricter decoders (Safari) cope
-          let s = 0;
-          while (s < all.length - 1 && !(all[s] === 0xFF && (all[s + 1] & 0xE0) === 0xE0)) s++;
-          const chunk = all.slice(s);
-          try {
-            const ab = await ctx.decodeAudioData(chunk.buffer);
-            fails = 0; decodeFails = 0; gotAudio = true;
-            const nSamp = ab.length, mono = new Float32Array(nSamp);
-            for (let c = 0; c < ab.numberOfChannels; c++) {
-              const dd = ab.getChannelData(c);
-              for (let i = 0; i < nSamp; i++) mono[i] += dd[i] / ab.numberOfChannels;
-            }
-            node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
-            radio.live = true;
-            $('btnRadio').textContent = '📻 Highland Radio: live';
-          } catch (e) {
-            decodeFails++;
-            note('decoder rejected chunk (x' + decodeFails + ') — continuing…');
-            if (decodeFails >= 5) { note('too many decode failures — reconnecting…'); break; }
+        const pl = await (await fetch(child, opts)).text();
+        const segs = pl.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+        let fetched = 0;
+        for (const s of segs) {
+          if (seen.has(s)) continue;
+          seen.add(s); fetched++;
+          if (!radio.live) note('buffering segment ' + fetched + '…');
+          const url = /^https?:/.test(s) ? s : cBase + s;
+          let buf = new Uint8Array(await (await fetch(url, opts)).arrayBuffer());
+          // strip an ID3v2 tag if present — some decoders choke on it
+          if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+            const sz = ((buf[6] & 127) << 21) | ((buf[7] & 127) << 14) | ((buf[8] & 127) << 7) | (buf[9] & 127);
+            buf = buf.slice(10 + sz);
           }
+          const ab = await ctx.decodeAudioData(buf.buffer);
+          fails = 0;
+          const nSamp = ab.length, mono = new Float32Array(nSamp);
+          for (let c = 0; c < ab.numberOfChannels; c++) {
+            const dd = ab.getChannelData(c);
+            for (let i = 0; i < nSamp; i++) mono[i] += dd[i] / ab.numberOfChannels;
+          }
+          node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
+          if (!radio.live) { radio.live = true; $('btnRadio').textContent = '📻 Highland Radio: live'; }
         }
+        // keep the dedup set pruned to the playlist's sliding window
+        seen = new Set(segs.filter(s => seen.has(s)));
+        await new Promise(r => setTimeout(r, fetched ? 5000 : 2500));
       }
     } catch (e) {
       if (!radio.on || e.name === 'AbortError') break;
-      note('connection blocked (' + (useRange ? 'A' : 'B') + ') — trying the other way…');
+      note('connection hiccup — reconnecting…');
     }
-    if (!gotAudio) useRange = !useRange;               // this way didn't work — flip
     fails++;
     if (radio.on) await new Promise(r => setTimeout(r, Math.min(fails * 1500, 10000)));
   }
