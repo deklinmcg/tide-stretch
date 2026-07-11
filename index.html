@@ -570,8 +570,16 @@ function ensureAudio() {
   if (!audioReady) audioReady = initAudio();
   return audioReady;
 }
+// iOS unlock: the context must be created AND resumed synchronously inside
+// the user's tap — before any await — or the page stays silent forever.
+// Call this first thing in every gesture handler that leads to sound.
+function primeAudio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  ensureAudio();
+}
 async function initAudio() {
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
   const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
   await ctx.audioWorklet.addModule(url);
   node = new AudioWorkletNode(ctx, 'paulstretch', { outputChannelCount: [2] });
@@ -927,6 +935,7 @@ function masterStop() {
   updateTicker();
 }
 $('btnMaster').onclick = async () => {
+  primeAudio();
   if (playing) { masterStop(); return; }
   if (selected) { await selectStation(selected); return; }
   // nothing chosen yet: play the original piece — Highland Radio on Buncrana
@@ -960,13 +969,13 @@ setInterval(() => {
 // Sampler: record up to 60 s of the stretched output, download as WAV
 // ---------------------------------------------------------------
 const REC_MAX = 60;                    // seconds
-const rec = { on: false, l: [], r: [], samples: 0, timer: null };
+const rec = { on: false, l: [], r: [], samples: 0, timer: null, pending: false };
 
 function recAppend(d) {
   if (!rec.on) return;
   rec.l.push(d.l); rec.r.push(d.r);
   rec.samples += d.l.length;
-  if (rec.samples >= REC_MAX * ctx.sampleRate) stopRec();
+  if (rec.samples >= REC_MAX * ctx.sampleRate) stopRec(true);
 }
 
 function recLabel() {
@@ -977,22 +986,32 @@ function recLabel() {
 async function startRec() {
   await ensureAudio();
   await ctx.resume();
-  rec.on = true; rec.l = []; rec.r = []; rec.samples = 0;
+  rec.on = true; rec.pending = false; rec.l = []; rec.r = []; rec.samples = 0;
   tapNode.port.postMessage({ rec: true });
   $('btnRec').classList.add('rec');
   recLabel();
   rec.timer = setInterval(recLabel, 500);
 }
 
-function stopRec() {
+function stopRec(auto) {
   if (!rec.on) return;
   rec.on = false;
   tapNode.port.postMessage({ rec: false });
   clearInterval(rec.timer);
   $('btnRec').classList.remove('rec');
-  $('btnRec').innerHTML = '<span class="dot">●</span> REC';
-  if (rec.samples > ctx.sampleRate * 0.25) downloadWav();
-  rec.l = []; rec.r = [];
+  if (rec.samples <= ctx.sampleRate * 0.25) {
+    $('btnRec').innerHTML = '<span class="dot">●</span> REC';
+    rec.l = []; rec.r = [];
+  } else if (auto) {
+    // hit the 60 s cap with no tap to ride on — iOS blocks downloads outside
+    // a user gesture, so hold the take and hand it over on the next tap
+    rec.pending = true;
+    $('btnRec').innerHTML = '⬇ SAVE WAV';
+  } else {
+    downloadWav();
+    $('btnRec').innerHTML = '<span class="dot">●</span> REC';
+    rec.l = []; rec.r = [];
+  }
 }
 
 function downloadWav() {
@@ -1025,7 +1044,22 @@ function downloadWav() {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
 
-$('btnRec').onclick = () => { rec.on ? stopRec() : startRec(); };
+$('btnRec').onclick = () => {
+  primeAudio();
+  if (rec.pending) {
+    downloadWav();
+    rec.pending = false; rec.l = []; rec.r = []; rec.samples = 0;
+    $('btnRec').innerHTML = '<span class="dot">●</span> REC';
+    return;
+  }
+  rec.on ? stopRec() : startRec();
+};
+
+// iOS pauses the context on interruptions (calls, route changes, tab
+// switches); nudge it back on the next touch or return to the page
+function nudgeAudio() { if (ctx && ctx.state === 'suspended' && playing) ctx.resume(); }
+document.addEventListener('touchend', nudgeAudio, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) nudgeAudio(); });
 
 // ---------------------------------------------------------------
 // Ticker
@@ -1131,6 +1165,8 @@ function fitWorld() {
   if (viewLevel === 0 && !anim) view = worldView();
 }
 window.addEventListener('resize', resizeMap);
+window.addEventListener('orientationchange', () => setTimeout(resizeMap, 300));
+if (window.visualViewport) visualViewport.addEventListener('resize', resizeMap);
 
 function proj(lon, lat) {
   let dl = lon - view.lon0;
@@ -1503,6 +1539,7 @@ function canvasPos(ev) {
 
 map.addEventListener('click', async (ev) => {
   if (Date.now() - lastPinch < 400 || Date.now() - lastPan < 300) return;   // tail of a pinch/drag
+  primeAudio();                                      // synchronous — inside the gesture
   const [x, y] = canvasPos(ev);
   $('hint').style.opacity = 0;
   if (viewLevel === 0) {
@@ -1654,6 +1691,7 @@ $('vol').oninput = () => { if (gain) gain.gain.value = Math.pow(+$('vol').value 
 $('winSize').onchange = () => { if (node) node.port.postMessage({ t: 'win', v: +$('winSize').value }); };
 
 $('btnPlay').onclick = async () => {
+  primeAudio();
   await ensureAudio();
   if (!loaded && !stream.on) await loadDemo();
   await ctx.resume();
