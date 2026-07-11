@@ -490,19 +490,34 @@ async function startRadio() {
   $('srcStatus').textContent = 'buffering the stream (~10 s)…';
   node.port.postMessage({ t: 'liveStart', cap: Math.floor(ctx.sampleRate * 300) });
   radio.ctrl = new AbortController();
+  radio.live = false;
+  // Surface progress on screen until audio flows — phones have no console.
+  const note = (msg) => {
+    console.log('[radio]', msg);
+    if (radio.on && !radio.live) $('srcStatus').textContent = 'radio: ' + msg;
+  };
   let fails = 0;
-  while (radio.on && fails < 30) {
+  // The 'Range: bytes=0-' header makes StreamTheWorld accept fetch, but
+  // Safari preflights it (Chrome safelists simple ranges) and the server
+  // fails the preflight — so alternate: any attempt that yields no audio
+  // flips the header for the next try.
+  let useRange = true;
+  while (radio.on && fails < 40) {
+    let gotAudio = false;
     try {
-      const resp = await fetch(RADIO_URL, {
-        signal: radio.ctrl.signal, cache: 'no-store',
-        headers: { 'Range': 'bytes=0-' },
-      });
+      note(fails ? 'reconnecting (attempt ' + (fails + 1) + ')…' : 'connecting…');
+      const opts = { signal: radio.ctrl.signal, cache: 'no-store' };
+      if (useRange) opts.headers = { 'Range': 'bytes=0-' };
+      const resp = await fetch(RADIO_URL, opts);
       const rdr = resp.body.getReader();
-      let acc = [], accLen = 0;
+      let acc = [], accLen = 0, decodeFails = 0;
       while (radio.on) {
         const { done, value } = await rdr.read();
-        if (done) { console.log('[radio] stream ended — reconnecting'); break; }
+        if (done) { note('stream closed — reconnecting…'); break; }
         acc.push(value); accLen += value.length;
+        if (!radio.live && accLen > 0 && accLen < 160 * 1024) {
+          note('buffering… ' + Math.round(accLen / 1638) + '%');
+        }
         if (accLen >= 160 * 1024) {                    // ~10 s at 128 kbps
           const all = new Uint8Array(accLen); let o = 0;
           for (const a of acc) { all.set(a, o); o += a.length; }
@@ -513,25 +528,31 @@ async function startRadio() {
           const chunk = all.slice(s);
           try {
             const ab = await ctx.decodeAudioData(chunk.buffer);
-            fails = 0;
+            fails = 0; decodeFails = 0; gotAudio = true;
             const nSamp = ab.length, mono = new Float32Array(nSamp);
             for (let c = 0; c < ab.numberOfChannels; c++) {
               const dd = ab.getChannelData(c);
               for (let i = 0; i < nSamp; i++) mono[i] += dd[i] / ab.numberOfChannels;
             }
             node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
+            radio.live = true;
             $('btnRadio').textContent = '📻 Highland Radio: live';
-          } catch (e) { console.log('[radio] chunk decode failed, skipping'); }
+          } catch (e) {
+            decodeFails++;
+            note('decoder rejected chunk (x' + decodeFails + ') — continuing…');
+            if (decodeFails >= 5) { note('too many decode failures — reconnecting…'); break; }
+          }
         }
       }
     } catch (e) {
       if (!radio.on || e.name === 'AbortError') break;
-      console.log('[radio] error', e.message);
+      note('connection blocked (' + (useRange ? 'A' : 'B') + ') — trying the other way…');
     }
+    if (!gotAudio) useRange = !useRange;               // this way didn't work — flip
     fails++;
     if (radio.on) await new Promise(r => setTimeout(r, Math.min(fails * 1500, 10000)));
   }
-  if (radio.on && fails >= 30) { $('srcStatus').textContent = 'radio stream failed — tap GO to retry'; stopRadio(); }
+  if (radio.on && fails >= 40) { $('srcStatus').textContent = 'radio stream failed — tap GO to retry'; stopRadio(); }
 }
 
 function stopRadio() {
