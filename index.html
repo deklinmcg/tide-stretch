@@ -274,6 +274,7 @@
 
     <div class="panel">
       <h2>Effects</h2>
+      <button class="b" id="fxPower">FX: on</button>
       <canvas id="xy"></canvas>
       <div class="xysel">
         <label>x <select id="xParam"></select></label>
@@ -669,7 +670,7 @@ const FX_PARAMS = {
   delay:    { label: 'delay mix',      min: 0,    max: 1,     log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
   dtime:    { label: 'delay time',     min: 0.06, max: 1.2,   log: false, def: 0.33, fmt: v => v.toFixed(2) + ' s' },
   dfb:      { label: 'delay feedback', min: 0,    max: 0.85,  log: false, def: 0.41, fmt: v => Math.round(v*100) + '%' },
-  drive:    { label: 'drive',          min: 0,    max: 1,     log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
+  drive:    { label: 'drive',          min: 0,    max: 0.3,   log: false, def: 0,    fmt: v => Math.round(v*100) + '%' },
 };
 const fxVal = {};                                  // param -> normalised 0..1
 for (const k in FX_PARAMS) fxVal[k] = FX_PARAMS[k].def;
@@ -720,22 +721,26 @@ function buildFX() {
   for (const k in FX_PARAMS) applyFX(k);
 }
 
+let fxOn = true;
 let lastDrive = -1;
 function applyFX(k) {
   if (!fx.master) return;
-  const v = fxReal(k), t = ctx.currentTime;
+  const t = ctx.currentTime;
+  // bypassed: every stage sits at neutral regardless of the stored values
+  const v = fxOn ? fxReal(k) : { lowpass: 20000, highpass: 20, reverb: 0, delay: 0, dtime: fxReal('dtime'), dfb: 0, drive: 0 }[k];
   if (k === 'lowpass') fx.lp.frequency.setTargetAtTime(v, t, 0.03);
   else if (k === 'highpass') fx.hp.frequency.setTargetAtTime(v, t, 0.03);
   else if (k === 'reverb') fx.rSend.gain.setTargetAtTime(v * 1.2, t, 0.05);
   else if (k === 'delay') fx.dSend.gain.setTargetAtTime(v, t, 0.05);
   else if (k === 'dtime') fx.delay.delayTime.setTargetAtTime(v, t, 0.12);
-  else if (k === 'dfb') fx.fb.gain.setTargetAtTime(fxVal.dfb * 0.85, t, 0.05);
+  else if (k === 'dfb') fx.fb.gain.setTargetAtTime(v, t, 0.05);
   else if (k === 'drive') {
-    const q = Math.round(fxVal.drive * 40);
-    if (q !== lastDrive) { lastDrive = q; fx.shaper.curve = driveCurve(fxVal.drive); }
-    fx.dry.gain.setTargetAtTime(1 - fxVal.drive * 0.35, t, 0.05);   // tame the level
+    const q = Math.round(v * 133);
+    if (q !== lastDrive) { lastDrive = q; fx.shaper.curve = driveCurve(v); }
+    fx.dry.gain.setTargetAtTime(1 - v * 1.15, t, 0.05);   // tame the level
   }
 }
+function applyAllFX() { for (const k in FX_PARAMS) applyFX(k); }
 
 let tideFrac = 0.5;            // 1 = high water, 0 = tide fully out — drives the pixel sea
 function sendStretch() {
@@ -1798,11 +1803,32 @@ for (const [sel, axis] of [['xParam', 'x'], ['yParam', 'y']]) {
     el.appendChild(o);
   }
   el.value = xyAxis[axis];
-  el.onchange = () => { xyAxis[axis] = el.value; drawXY(); };
+  el.onchange = () => {
+    primeAudio();
+    // dropping a param off the pad means you're done with it — return it
+    // to its default (off) unless the other axis still holds it
+    const old = xyAxis[axis];
+    xyAxis[axis] = el.value;
+    if (old !== el.value && xyAxis.x !== old && xyAxis.y !== old) {
+      fxVal[old] = FX_PARAMS[old].def;
+      applyFX(old);
+    }
+    drawXY();
+  };
 }
 $('fxReset').onclick = () => {
   primeAudio();
-  for (const k in FX_PARAMS) { fxVal[k] = FX_PARAMS[k].def; applyFX(k); }
+  for (const k in FX_PARAMS) fxVal[k] = FX_PARAMS[k].def;
+  applyAllFX();
+  drawXY();
+};
+$('fxPower').classList.add('active');
+$('fxPower').onclick = () => {
+  primeAudio();
+  fxOn = !fxOn;
+  applyAllFX();
+  $('fxPower').textContent = 'FX: ' + (fxOn ? 'on' : 'off');
+  $('fxPower').classList.toggle('active', fxOn);
   drawXY();
 };
 
@@ -1824,9 +1850,10 @@ function drawXY() {
   g.beginPath(); g.moveTo(0, py); g.lineTo(w, py); g.stroke();
   g.fillStyle = '#5fd4c4';
   g.beginPath(); g.arc(px, py, 6 * dpr, 0, 7); g.fill();
-  $('fxRead').textContent =
-    FX_PARAMS[xyAxis.x].label + ' ' + FX_PARAMS[xyAxis.x].fmt(fxReal(xyAxis.x)) + '  ·  ' +
-    FX_PARAMS[xyAxis.y].label + ' ' + FX_PARAMS[xyAxis.y].fmt(fxReal(xyAxis.y));
+  $('fxRead').textContent = fxOn
+    ? FX_PARAMS[xyAxis.x].label + ' ' + FX_PARAMS[xyAxis.x].fmt(fxReal(xyAxis.x)) + '  ·  ' +
+      FX_PARAMS[xyAxis.y].label + ' ' + FX_PARAMS[xyAxis.y].fmt(fxReal(xyAxis.y))
+    : 'bypassed — the radio passes through untouched';
 }
 
 let xyDown = false;
