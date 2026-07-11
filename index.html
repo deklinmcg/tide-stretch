@@ -73,6 +73,14 @@
   #waveWrap:fullscreen { background: #000; cursor: none; }
   #waveWrap:fullscreen #wave { width: 100vw; height: 100vh; border: none; border-radius: 0; }
   #waveWrap:fullscreen #btnFull { cursor: pointer; }
+  /* fake fullscreen for browsers without the Fullscreen API (iPhone) */
+  #waveWrap.fake {
+    position: fixed; inset: 0; z-index: 1000; background: #000; margin: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #waveWrap.fake #wave { width: 100vw; height: 100vh; border: none; border-radius: 0; }
+  /* portrait phone: rotate the sea so it's always landscape */
+  #waveWrap.fake.rot #wave { transform: rotate(90deg); width: 100vh; height: 100vw; }
   .status { font-size: 12px; color: var(--dim); margin-top: 10px; min-height: 16px; }
   .status b { color: var(--text); font-weight: 500; }
   .meter { height: 4px; background: #0d141c; border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -787,18 +795,54 @@ const wctx = wv.getContext('2d');
 let wimg = wctx.createImageData(WVW, WVH);
 
 // full screen: the sea fills the display (audio is untouched — it lives in
-// the audio graph, not the picture). Esc or the button comes back.
-$('btnFull').onclick = () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else $('waveWrap').requestFullscreen().catch(() => {});
-};
-document.addEventListener('fullscreenchange', () => {
-  const fs = document.fullscreenElement === $('waveWrap');
-  WVH = fs ? Math.max(72, Math.round(WVW * screen.height / screen.width)) : 72;
+// the audio graph, not the picture). Native Fullscreen API where available
+// (orientation-locked to landscape on Android); on iPhone, which has no
+// Fullscreen API, a fixed overlay — rotated 90° in portrait so the sea is
+// always landscape. Esc or the button comes back.
+function isFullish() {
+  return !!document.fullscreenElement || $('waveWrap').classList.contains('fake');
+}
+function setWaveSize() {
+  const fs = isFullish();
+  if (fs) {
+    // the sea always renders landscape: long edge over short edge
+    const long = Math.max(innerWidth, innerHeight), short = Math.min(innerWidth, innerHeight);
+    WVH = Math.max(48, Math.round(WVW * short / long));
+  } else {
+    WVH = 72;
+  }
   wv.width = WVW; wv.height = WVH;
   wimg = wctx.createImageData(WVW, WVH);
-  $('btnFull').textContent = fs ? '⛶ exit (or Esc)' : '⛶ full screen';
+  $('btnFull').textContent = fs ? '✕ exit' : '⛶ full screen';
   drawWave();
+}
+$('btnFull').onclick = async () => {
+  const wrap = $('waveWrap');
+  if (document.fullscreenElement) { document.exitFullscreen(); return; }
+  if (wrap.classList.contains('fake')) { wrap.classList.remove('fake', 'rot'); setWaveSize(); return; }
+  const rq = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+  if (rq) {
+    try {
+      await rq.call(wrap);
+      try { await screen.orientation.lock('landscape'); } catch (e) { /* iOS/desktop: not allowed */ }
+      return;                                  // fullscreenchange does the sizing
+    } catch (e) { /* fall through to the overlay */ }
+  }
+  wrap.classList.add('fake');
+  if (innerHeight > innerWidth) wrap.classList.add('rot');
+  setWaveSize();
+};
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => {
+    if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (e) {} }
+    setWaveSize();
+  });
+}
+window.addEventListener('resize', () => {
+  if (!isFullish()) return;
+  const wrap = $('waveWrap');
+  if (wrap.classList.contains('fake')) wrap.classList.toggle('rot', innerHeight > innerWidth);
+  setWaveSize();
 });
 const PAL = [
   [244, 250, 252], [214, 236, 244], [176, 214, 234], [130, 184, 216], [96, 156, 200],
