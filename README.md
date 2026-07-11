@@ -1,4 +1,4 @@
-# Tide Stretch
+# Tidal Wave
 
 **The world's local radio, slowed down by the world's sea.**
 
@@ -18,7 +18,8 @@ The original piece — Highland Radio (Letterkenny) on the Donegal tide — is s
 1. Tap anywhere glowing on the map to zoom into that coastline
 2. Tap a tide-gauge dot — the local station tunes in (~10 s of buffering) and drifts on that tide
 3. Leave it running — the change happens on tidal time
-4. `lab` (bottom right) opens the manual workbench: stretch any audio file by hand or on a simulated tide
+4. **● REC** (in the ticker) samples up to 60 s of whatever you're hearing and downloads it as a WAV — drop it straight into a sampler
+5. `lab` (bottom right) opens the manual workbench: stretch any audio file by hand or on a simulated tide
 
 ## How it works
 
