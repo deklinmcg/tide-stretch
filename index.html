@@ -126,6 +126,25 @@
     font-variant-numeric: tabular-nums; white-space: nowrap;
   }
   #btnRec:hover { color: var(--text); }
+  #btnFav {
+    flex: 0 0 auto; height: 100%; width: 44px;
+    background: #0d1420; color: var(--dim); border: none;
+    border-left: 1px solid var(--line); cursor: pointer; font-size: 16px;
+  }
+  #btnFav:hover { color: var(--text); }
+  #btnFav.faved { color: #ffd27f; }
+  .favItem {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 4px; border-bottom: 1px solid #16222e;
+    cursor: pointer; font-size: 12.5px;
+  }
+  .favItem:hover .favName { color: var(--accent); }
+  .favItem .favStar { color: #ffd27f; flex: 0 0 auto; }
+  .favItem .favBody { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .favItem .favBody small { color: var(--dim); display: block; font-size: 11px; }
+  .favItem .favDel { flex: 0 0 auto; background: none; border: none; color: var(--dim); cursor: pointer; font-size: 13px; padding: 4px 6px; }
+  .favItem .favDel:hover { color: var(--red); }
+  #favEmpty { font-size: 11.5px; color: var(--dim); }
   #btnRec .dot { color: var(--red); }
   #btnRec.rec { color: #fff; background: #2a0f0e; animation: recPulse 1.1s steps(2, start) infinite; }
   @keyframes recPulse { 50% { background: #180a0a; } }
@@ -243,6 +262,7 @@
   <button id="btnMaster" title="play / stop">▶</button>
   <div id="liveTag"><span id="liveDot"></span>LIVE</div>
   <div id="tickerClip"><div id="tickerText">loading the world's tide gauges…</div></div>
+  <button id="btnFav" title="favourite this station">☆</button>
   <button id="btnRec" title="record up to 60 s of what you hear and download it as a WAV"><span class="dot">●</span> REC</button>
 </div>
 
@@ -250,6 +270,12 @@
   <div class="wrap">
     <button id="btnLabClose" style="float:right" class="b">✕</button>
     <h1>Tidal <span>Wave</span></h1>
+
+    <div class="panel">
+      <h2>Favourites</h2>
+      <div id="favList"></div>
+      <div id="favEmpty">Nothing saved yet — tap ☆ in the ticker while a station plays. Favourites glow gold on the map.</div>
+    </div>
 
     <div class="panel">
       <h2>Filter the world</h2>
@@ -1048,6 +1074,7 @@ async function selectStation(st) {
   }
   selected = st;
   tide = null; lastPoll = 0;
+  updateFavStar(); updateHud();               // before any await — audio may still be unlocking
   location.hash = 's=' + st.src + ':' + encodeURIComponent(st.id);
   playing = true;
   $('btnMaster').textContent = '◼';
@@ -1060,6 +1087,7 @@ async function selectStation(st) {
   if (st.radio) startStream(st.radio);
   pollNow();
   updateHud();
+  updateFavStar();
 }
 
 function masterStop() {
@@ -1197,6 +1225,56 @@ $('btnRec').onclick = () => {
 function nudgeAudio() { if (ctx && ctx.state === 'suspended' && playing) ctx.resume(); }
 document.addEventListener('touchend', nudgeAudio, true);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) nudgeAudio(); });
+
+// ---------------------------------------------------------------
+// Favourites: saved gauge+station combos, kept in localStorage
+// ---------------------------------------------------------------
+let favs = [];                          // [{k:'src:id', gauge, radio, cc}]
+try { favs = JSON.parse(localStorage.getItem('tw_favs') || '[]'); } catch (e) {}
+const favKeys = () => new Set(favs.map(f => f.k));
+function saveFavs() {
+  try { localStorage.setItem('tw_favs', JSON.stringify(favs)); } catch (e) {}
+  updateFavStar(); renderFavList();
+}
+function toggleFav() {
+  if (!selected) return;
+  const k = tideKey(selected);
+  const i = favs.findIndex(f => f.k === k);
+  if (i >= 0) favs.splice(i, 1);
+  else favs.push({ k, gauge: selected.name, radio: selected.radio ? selected.radio.name : '', cc: selected.country });
+  saveFavs();
+}
+function updateFavStar() {
+  const on = selected && favKeys().has(tideKey(selected));
+  $('btnFav').textContent = on ? '★' : '☆';
+  $('btnFav').classList.toggle('faved', on);
+  $('btnFav').title = !selected ? 'pick a station first' : on ? 'remove from favourites' : 'favourite this station';
+}
+function renderFavList() {
+  const box = $('favList');
+  box.innerHTML = '';
+  $('favEmpty').style.display = favs.length ? 'none' : 'block';
+  for (const f of favs) {
+    const row = document.createElement('div');
+    row.className = 'favItem';
+    row.innerHTML = '<span class="favStar">★</span>' +
+      '<span class="favBody">' + esc(f.radio || 'wave noise') +
+      '<small>' + esc(f.gauge) + (DATA ? ', ' + esc(countryName(f.cc)) : '') + '</small></span>' +
+      '<button class="favDel" title="remove">✕</button>';
+    row.querySelector('.favDel').onclick = (ev) => {
+      ev.stopPropagation();
+      favs = favs.filter(x => x.k !== f.k);
+      saveFavs();
+    };
+    row.onclick = async () => {
+      primeAudio();
+      const st = DATA && DATA.stations.find(s => tideKey(s) === f.k);
+      if (st) await selectStation(st);
+    };
+    box.appendChild(row);
+  }
+}
+$('btnFav').onclick = () => { toggleFav(); };
 
 // ---------------------------------------------------------------
 // Ticker
@@ -1470,6 +1548,7 @@ function drawDots() {
   const zoomed = viewLevel === 1;
   const pulse = (Math.sin(mt * 2.2) + 1) / 2;
   const filtering = flt.genre || flt.cont || flt.cc || flt.tide;
+  const fk = favKeys();
   for (const s of DATA.stations) {
     const [x, y] = proj(s.lon, s.lat);
     s.px = x; s.py = y;
@@ -1482,6 +1561,15 @@ function drawDots() {
     const tideUnknown = flt.tide && tideMatch(s) === null;     // still being read: dim
     const xi = Math.round(x), yi = Math.round(y);
     const isHov = s === hover;
+    const isFav = fk.has(s.src + ':' + s.id);
+    if (isFav && !isSel) {                                     // favourites glow gold, always
+      mctx.fillStyle = 'rgba(255,210,127,' + (0.35 + 0.3 * pulse) + ')';
+      mctx.fillRect(xi - 1, yi, 3, 1);
+      mctx.fillRect(xi, yi - 1, 1, 3);
+      mctx.fillStyle = isHov ? '#ffffff' : '#ffd27f';
+      mctx.fillRect(xi, yi, 1, 1);
+      continue;
+    }
     // small white gauge dots — faint at world scale, clear once zoomed in
     if (isSel) {
       mctx.fillStyle = pulse > 0.5 ? '#ff3b30' : '#ff8a80';
@@ -2145,6 +2233,7 @@ setInterval(() => drawScope(Date.now()), 500);
   } catch (e) {
     setTicker('could not load the station list — refresh to retry');
   }
+  renderFavList(); updateFavStar();
   setTimeout(() => { if (!selected) $('hint').style.opacity = 1; }, 400);
 })();
 </script>
