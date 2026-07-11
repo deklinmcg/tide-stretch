@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tide Stretch — radio slowed by the sea</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tide Stretch — the world's radio, slowed by the world's sea</title>
 <style>
   :root {
     --bg: #0b1016;
@@ -13,37 +13,123 @@
     --dim: #7a8b9b;
     --accent: #5fd4c4;
     --accent2: #4a9fd4;
+    --red: #ff3b30;
+    --tick-h: 44px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    display: flex; justify-content: center; padding: 28px 16px 60px;
+    overflow: hidden;
   }
-  .wrap { width: 100%; max-width: 720px; }
-  h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.3px; }
-  h1 span { color: var(--accent); }
-  .sub { color: var(--dim); font-size: 13px; margin: 6px 0 22px; line-height: 1.5; }
+
+  /* ---------- map screen ---------- */
+  #mapScreen { position: fixed; inset: 0; }
+  #map {
+    position: absolute; inset: 0; width: 100%; height: calc(100% - var(--tick-h));
+    image-rendering: pixelated; cursor: crosshair; touch-action: none;
+  }
+  #hud {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); left: 14px;
+    pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,.7);
+  }
+  #hud h1 { font-size: 18px; font-weight: 600; letter-spacing: .3px; }
+  #hud h1 span { color: var(--accent); }
+  #hud .sub { color: var(--dim); font-size: 11.5px; margin-top: 3px; max-width: 62vw; line-height: 1.45; }
+  #btnBack {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px;
+    background: rgba(10,20,30,.6); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 13px; font-size: 13px; cursor: pointer; display: none;
+  }
+  #btnBack:hover { border-color: var(--accent); }
+  #tip {
+    position: absolute; pointer-events: none; display: none; z-index: 5;
+    background: rgba(8,14,20,.88); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; font-size: 12px; line-height: 1.45; max-width: 260px;
+  }
+  #tip b { color: var(--accent); font-weight: 600; }
+  #tip .r { color: var(--dim); font-size: 11px; }
+  #zoomCtl {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 4;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #zoomCtl button {
+    width: 38px; height: 38px; font-size: 20px; line-height: 1;
+    background: rgba(10,20,30,.65); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; cursor: pointer;
+  }
+  #zoomCtl button:hover { border-color: var(--accent); color: var(--accent); }
+  #labLink {
+    position: absolute; bottom: calc(var(--tick-h) + 8px); right: 12px; z-index: 4;
+    color: var(--dim); font-size: 11px; text-decoration: none;
+    background: rgba(10,20,30,.5); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px; cursor: pointer;
+  }
+  #labLink:hover { color: var(--accent); border-color: var(--accent); }
+  #hint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    pointer-events: none; text-align: center; z-index: 3;
+    text-shadow: 0 1px 8px rgba(0,0,0,.8); transition: opacity .8s;
+    font-size: 14px; color: var(--text); letter-spacing: .4px;
+  }
+  #hint .k { color: var(--accent); }
+
+  /* ---------- ticker ---------- */
+  #ticker {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--tick-h);
+    padding-bottom: env(safe-area-inset-bottom);
+    background: #070c12; border-top: 1px solid var(--line);
+    display: flex; align-items: center; z-index: 10;
+  }
+  #btnMaster {
+    flex: 0 0 auto; width: 56px; height: 100%;
+    background: var(--accent); color: #06231e; border: none;
+    font-size: 17px; font-weight: 700; cursor: pointer;
+  }
+  #btnMaster.playing { background: #16222e; color: var(--accent); }
+  #liveTag {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+    padding: 0 12px; height: 100%; border-right: 1px solid var(--line);
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--dim);
+  }
+  #liveTag.on { color: #fff; }
+  #liveDot { width: 8px; height: 8px; border-radius: 50%; background: #3a4a58; }
+  #liveTag.on #liveDot { background: var(--red); animation: blink 1.1s steps(2, start) infinite; box-shadow: 0 0 7px var(--red); }
+  @keyframes blink { 50% { opacity: .15; } }
+  #tickerClip { flex: 1 1 auto; overflow: hidden; height: 100%; position: relative; }
+  #tickerText {
+    position: absolute; white-space: nowrap; top: 50%; transform: translateY(-50%);
+    font-size: 13.5px; color: var(--text); will-change: left;
+  }
+  #tickerText b { color: var(--accent); font-weight: 600; }
+  #tickerText .sep { color: #33475a; padding: 0 14px; }
+
+  /* ---------- lab (the old controls) ---------- */
+  #labScreen {
+    position: fixed; inset: 0; bottom: var(--tick-h); z-index: 20; display: none;
+    overflow-y: auto; background: rgba(11,16,22,.97); padding: 24px 16px 60px;
+  }
+  #labScreen .wrap { max-width: 680px; margin: 0 auto; }
+  #labScreen h1 { font-size: 18px; margin-bottom: 4px; }
+  #labScreen h1 span { color: var(--accent); }
+  #labScreen .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; }
   .panel {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 12px; padding: 18px; margin-bottom: 16px;
   }
   .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); margin-bottom: 14px; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  button {
+  button.b {
     background: #1b2733; color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer;
   }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); color: #06231e; border: none; font-weight: 600; }
-  button.active { background: var(--accent2); color: #04121c; border: none; font-weight: 600; }
+  button.b:hover { border-color: var(--accent); }
+  button.b.active { background: var(--accent2); color: #04121c; border: none; font-weight: 600; }
   select, input[type=number] {
     background: #1b2733; color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 10px; font-size: 14px;
-    max-width: 100%;
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; max-width: 100%;
   }
-  /* long station names must not stretch the layout on phones */
-  #station { max-width: min(300px, 48vw); text-overflow: ellipsis; }
   input[type=number] { width: 72px; }
   .drop {
     border: 1.5px dashed var(--line); border-radius: 10px;
@@ -51,142 +137,128 @@
     margin-top: 12px; transition: border-color .15s, color .15s; cursor: pointer;
   }
   .drop.over { border-color: var(--accent); color: var(--accent); }
-  .bigval {
-    font-variant-numeric: tabular-nums;
-    font-size: 44px; font-weight: 200; color: var(--accent);
-    line-height: 1;
-  }
+  .bigval { font-variant-numeric: tabular-nums; font-size: 44px; font-weight: 200; color: var(--accent); line-height: 1; }
   .bigval small { font-size: 18px; color: var(--dim); font-weight: 400; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   label.small { font-size: 12px; color: var(--dim); }
-  canvas { width: 100%; height: 110px; display: block; border-radius: 8px; background: #0d141c; margin-top: 12px; }
-  #waveWrap { position: relative; margin-bottom: 18px; }
-  #wave {
-    width: 100%; height: auto; display: block;
-    image-rendering: pixelated;
-    border-radius: 12px; border: 1px solid var(--line);
-  }
-  #btnFull {
-    position: absolute; right: 10px; bottom: 10px;
-    padding: 4px 10px; font-size: 12px;
-    background: rgba(10, 20, 30, 0.55); border: 1px solid rgba(255,255,255,0.25);
-    color: #e8f4f8; opacity: 0.7;
-  }
-  #btnFull:hover { opacity: 1; }
-  #waveWrap:fullscreen { background: #000; cursor: none; }
-  #waveWrap:fullscreen #wave { width: 100vw; height: 100vh; border: none; border-radius: 0; }
-  #waveWrap:fullscreen #btnFull { cursor: pointer; }
-  /* fake fullscreen for browsers without the Fullscreen API (iPhone) */
-  #waveWrap.fake {
-    position: fixed; inset: 0; z-index: 1000; background: #000; margin: 0;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #waveWrap.fake #wave { width: 100vw; height: 100vh; border: none; border-radius: 0; }
-  /* portrait phone: rotate the sea so it's always landscape */
-  #waveWrap.fake.rot #wave { transform: rotate(90deg); width: 100vh; height: 100vw; }
+  #scope { width: 100%; height: 110px; display: block; border-radius: 8px; background: #0d141c; margin-top: 12px; }
   .status { font-size: 12px; color: var(--dim); margin-top: 10px; min-height: 16px; }
   .status b { color: var(--text); font-weight: 500; }
   .meter { height: 4px; background: #0d141c; border-radius: 2px; margin-top: 10px; overflow: hidden; }
   .meter i { display: block; height: 100%; width: 0%; background: var(--accent2); border-radius: 2px; }
   .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
   .note { font-size: 12px; color: var(--dim); line-height: 1.6; margin-top: 12px; }
+  #btnLabClose {
+    position: sticky; top: 0; float: right; margin-left: 12px;
+    background: #1b2733; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Tide <span>Stretch</span></h1>
-  <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Press GO and leave it running.</p>
 
-  <div id="waveWrap">
-    <canvas id="wave" width="240" height="72"></canvas>
-    <button id="btnFull" title="full screen — sound keeps playing, Esc to come back">⛶ full screen</button>
+<div id="mapScreen">
+  <canvas id="map"></canvas>
+  <div id="hud">
+    <h1>Tide <span>Stretch</span></h1>
+    <div class="sub" id="hudSub">local radio, slowed down by the local sea</div>
   </div>
+  <button id="btnBack">◀ world</button>
+  <div id="hint">tap a glowing <span class="k">tide gauge</span> — its nearest local radio<br>plays at the pace of its sea</div>
+  <div id="tip"></div>
+  <div id="zoomCtl">
+    <button id="btnZin" title="zoom in">+</button>
+    <button id="btnZout" title="zoom out">−</button>
+  </div>
+  <a id="labLink">lab</a>
+</div>
 
-  <button class="primary" id="btnGo" style="width:100%; padding:15px; font-size:16px; margin-bottom:6px">▶ GO — Highland Radio on the Buncrana tide</button>
-  <div class="status" id="goStatus" style="text-align:center; margin-bottom:16px"></div>
+<div id="ticker">
+  <button id="btnMaster" title="play / stop">▶</button>
+  <div id="liveTag"><span id="liveDot"></span>LIVE</div>
+  <div id="tickerClip"><div id="tickerText">loading the world's tide gauges…</div></div>
+</div>
 
-  <div class="panel">
-    <h2>Source sound</h2>
+<div id="labScreen">
+  <div class="wrap">
+    <button id="btnLabClose">✕ back to the map</button>
+    <h1>Tide <span>Stretch</span> — lab</h1>
+    <p class="sub">Manual controls: stretch any audio file by hand or on a simulated tide. The live map is the main piece — this is the workbench it grew out of.</p>
+
+    <div class="panel">
+      <h2>Source sound</h2>
+      <div class="row">
+        <button class="b" id="btnDemo">Use built-in wave noise</button>
+        <span class="status" id="srcStatus" style="margin-top:0">no sound loaded</span>
+      </div>
+      <div class="drop" id="drop">…or drop an audio file here (waves, shipping forecast, anything) / click to browse</div>
+      <input type="file" id="file" accept="audio/*" style="display:none">
+      <div class="meter"><i id="posBar"></i></div>
+    </div>
+
+    <div class="panel">
+      <h2>Stretch</h2>
+      <div class="grid2">
+        <input type="range" id="stretch" min="0" max="1000" value="450">
+        <div class="bigval"><span id="stretchVal">8.0</span><small>×</small></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <label class="small">window
+          <select id="winSize">
+            <option value="1024">1024 (grainy)</option>
+            <option value="4096" selected>4096 (classic)</option>
+            <option value="16384">16384 (glacial)</option>
+          </select>
+        </label>
+        <label class="small">glide
+          <select id="glide">
+            <option value="0.5">fast (0.5 s)</option>
+            <option value="3">slow (3 s)</option>
+            <option value="15" selected>tidal (15 s)</option>
+          </select>
+        </label>
+        <label class="small">volume
+          <input type="range" id="vol" min="0" max="100" value="80" style="width:110px; vertical-align:middle">
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Simulated tide</h2>
+      <div class="row">
+        <button class="b" id="btnTide">Simulated: off</button>
+        <label class="small">cycle
+          <select id="tidePeriod">
+            <option value="60">1 minute (demo)</option>
+            <option value="300" selected>5 minutes</option>
+            <option value="1800">30 minutes</option>
+            <option value="44700">12 h 25 m (real tide)</option>
+          </select>
+        </label>
+        <label class="small">low <input type="number" id="tideMin" value="1.5" min="1" max="100" step="0.5"></label>
+        <label class="small">high <input type="number" id="tideMax" value="30" min="1" max="100" step="0.5"></label>
+      </div>
+      <canvas id="scope"></canvas>
+      <div class="note">Teal line = actual stretch over the last two minutes. On the map, this range is what the real tide sweeps: high water = "low", tide fully out = "high".</div>
+    </div>
+
     <div class="row">
-      <button id="btnRadio">📻 Highland Radio live</button>
-      <button id="btnDemo">Use built-in wave noise</button>
-      <span class="status" id="srcStatus" style="margin-top:0">no sound loaded</span>
+      <button class="b" id="btnPlay">▶ Play</button>
+      <span class="status" id="status"></span>
     </div>
-    <div class="drop" id="drop">…or drop an audio file here (waves, shipping forecast, anything) / click to browse</div>
-    <input type="file" id="file" accept="audio/*" style="display:none">
-    <div class="meter"><i id="posBar"></i></div>
-    <div class="note">The bar shows where we are in the source recording — at high stretch it crawls.</div>
-  </div>
 
-  <div class="panel">
-    <h2>Stretch</h2>
-    <div class="grid2">
-      <input type="range" id="stretch" min="0" max="1000" value="450">
-      <div class="bigval"><span id="stretchVal">8.0</span><small>×</small></div>
-    </div>
-    <div class="row" style="margin-top:14px">
-      <label class="small">window
-        <select id="winSize">
-          <option value="1024">1024 (grainy)</option>
-          <option value="4096" selected>4096 (classic)</option>
-          <option value="16384">16384 (glacial)</option>
-        </select>
-      </label>
-      <label class="small">glide
-        <select id="glide">
-          <option value="0.5">fast (0.5 s)</option>
-          <option value="3">slow (3 s)</option>
-          <option value="15" selected>tidal (15 s)</option>
-        </select>
-      </label>
-      <label class="small">volume
-        <input type="range" id="vol" min="0" max="100" value="80" style="width:110px; vertical-align:middle">
-      </label>
-    </div>
+    <p class="note" style="margin-top:22px">
+      Sound engine: <a href="https://github.com/paulnasca/paulstretch_python" style="color:var(--accent2)">paulstretch</a> by Nasca Octavian Paul, in real time in your browser.
+      Tide data: <a href="https://www.ioc-sealevelmonitoring.org" style="color:var(--accent2)">IOC Sea Level Monitoring</a> (global) · UK <a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" style="color:var(--accent2)">Environment Agency</a> · Ireland <a href="https://erddap.marine.ie" style="color:var(--accent2)">Marine Institute</a> · <a href="https://www.data.qld.gov.au/dataset/coastal-data-system-near-real-time-storm-tide-data" style="color:var(--accent2)">Queensland Government</a>.
+      Radio directory: <a href="https://www.radio-browser.info" style="color:var(--accent2)">Radio Browser</a>. Streams play directly from each station to your browser; nothing is rebroadcast.
+      Everything runs client-side; no server, no tracking. Made in Donegal.
+    </p>
   </div>
-
-  <div class="panel">
-    <h2>Tide signal</h2>
-    <div class="row">
-      <button id="btnLive">Live tide: off</button>
-      <select id="station" title="tide gauge station"><option value="ie:Buncranna">Buncranna (IE)</option></select>
-      <span class="status" id="liveStatus" style="margin-top:0"></span>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="btnTide">Simulated: off</button>
-      <label class="small">cycle
-        <select id="tidePeriod">
-          <option value="60">1 minute (demo)</option>
-          <option value="300" selected>5 minutes</option>
-          <option value="1800">30 minutes</option>
-          <option value="44700">12 h 25 m (real tide)</option>
-        </select>
-      </label>
-      <label class="small">low <input type="number" id="tideMin" value="1.5" min="1" max="100" step="0.5"></label>
-      <label class="small">high <input type="number" id="tideMax" value="30" min="1" max="100" step="0.5"></label>
-    </div>
-    <canvas id="scope"></canvas>
-    <div class="note">Live mode reads a real tide gauge every 5 minutes — UK stations from the Environment Agency, Irish from the Marine Institute, Australian (Queensland) from the Queensland Government. The station's last 25 hours calibrate its high/low range: high water = stretch at "low", tide fully out = stretch at "high". Teal line = actual stretch over the last two minutes.</div>
-  </div>
-
-  <div class="row">
-    <button class="primary" id="btnPlay">▶ Play</button>
-    <span class="status" id="status"></span>
-  </div>
-
-  <p class="note" style="margin-top:22px">
-    Sound engine: <a href="https://github.com/paulnasca/paulstretch_python" style="color:var(--accent2)">paulstretch</a> by Nasca Octavian Paul, running in real time in your browser.
-    Tide data: UK <a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" style="color:var(--accent2)">Environment Agency</a> · Ireland <a href="https://erddap.marine.ie" style="color:var(--accent2)">Marine Institute</a> · Queensland <a href="https://www.data.qld.gov.au/dataset/coastal-data-system-near-real-time-storm-tide-data" style="color:var(--accent2)">Queensland Government</a>.
-    Radio: Highland Radio, Letterkenny, Co. Donegal — streamed directly from their public stream to your browser; nothing is rebroadcast.
-    Everything runs client-side; no server, no tracking. Made in Donegal.
-  </p>
 </div>
 
 <script>
 // ---------------------------------------------------------------
 // AudioWorklet: real-time paulstretch
-// Windows of the source are FFT'd, phases randomised, inverse-FFT'd
-// and overlap-added. Playhead advances at hop/stretch per grain.
 // ---------------------------------------------------------------
 const workletCode = `
 class Ring {
@@ -369,15 +441,6 @@ class Paulstretch extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
-    // live mode: whatever is wired into our input (the radio element)
-    // is appended to the rolling ring buffer, even while stopped
-    const inp = inputs[0];
-    if (this.mode === 'live' && this.lbuf && inp && inp.length && inp[0].length) {
-      const C = this.cap, a = inp[0], b = inp.length > 1 ? inp[1] : inp[0];
-      for (let i = 0; i < a.length; i++) this.lbuf[(this.wAbs + i) % C] = (a[i] + b[i]) * 0.5;
-      this.wAbs += a.length;
-      this.keepAhead();
-    }
     const out = outputs[0];
     const n = out[0].length;
     const hasSource = this.mode === 'live' ? !!this.lbuf : !!this.src;
@@ -415,12 +478,13 @@ registerProcessor('paulstretch', Paulstretch);
 `;
 
 // ---------------------------------------------------------------
-// Main thread
+// Engine (main thread)
 // ---------------------------------------------------------------
 let ctx = null, node = null, gain = null;
 let playing = false, loaded = false;
 let actualStretch = 8;
-const history = [];            // [time, stretch]
+let streamLag = 0;                     // seconds behind the live stream
+const history = [];                    // [time, stretch] for the lab scope
 
 const $ = id => document.getElementById(id);
 const sliderToStretch = v => Math.pow(10, (v / 1000) * 2);   // 0..1000 -> 1..100 (log)
@@ -444,12 +508,8 @@ async function initAudio() {
     if (e.data.t === 'state') {
       actualStretch = e.data.stretch;
       if (e.data.live) {
+        streamLag = e.data.lag;
         $('posBar').style.width = (e.data.frac * 100).toFixed(2) + '%';
-        if (radio.on && e.data.lag > 1) {
-          const lag = e.data.lag;
-          const txt = lag < 90 ? Math.round(lag) + ' s' : (lag / 60).toFixed(1) + ' min';
-          $('srcStatus').innerHTML = 'live: <b>' + radio.name + '</b> — hearing the radio from ' + txt + ' ago';
-        }
       } else {
         $('posBar').style.width = (e.data.pos * 100).toFixed(2) + '%';
       }
@@ -469,100 +529,862 @@ function sendStretch() {
 function sendGlide() { if (node) node.port.postMessage({ t: 'glide', v: +$('glide').value }); }
 
 function loadChannels(chData, label) {
-  stopRadio();
+  stopStream();
   node.port.postMessage({ t: 'load', ch: chData }, chData.map(a => a.buffer));
   loaded = true;
   $('srcStatus').innerHTML = 'loaded: <b>' + label + '</b>';
 }
 
-// --- live radio (Highland Radio, Letterkenny) ---
-// HLS: the master playlist redirects to a per-session playlist of ~10 s
-// AAC segments; each segment is a plain GET (no special headers, so no
-// CORS preflight — Safari-safe), decoded and appended to the worklet's
-// 5-minute rolling ring buffer.
-// History: <audio> element → iOS refuses to route cross-origin element
-// audio into the graph; raw MP3 fetch → StreamTheWorld closes Safari's
-// connections no matter what headers are sent. HLS is what their own
-// player uses, so it works everywhere.
-const RADIO_HLS = 'https://playerservices.streamtheworld.com/api/livestream-redirect/HIGHLAND_RADIOAAC.m3u8';
-let radio = { on: false, ctrl: null, name: 'Highland Radio' };
+// ---------------------------------------------------------------
+// Live radio streams — three transports, one destination: the
+// worklet's 5-minute rolling ring buffer.
+//   hls : playlist of ~10 s ADTS-AAC / MP3 segments (plain GETs, no preflight)
+//   mp3 : icecast stream, chunk-decoded on MP3 frame boundaries
+//   aac : icecast ADTS stream, chunk-decoded on ADTS frame boundaries
+// For chunked icecast decoding, the tail of the previous chunk is prepended
+// before decodeAudioData and its samples dropped afterwards — the decoder
+// warms up on old audio, so the seams land inside the paulstretch smear.
+// ---------------------------------------------------------------
+const stream = { on: false, ctrl: null, live: false, radio: null, gen: 0 };
 
-async function startRadio() {
-  await ensureAudio();
-  radio.on = true; loaded = true;
-  $('btnRadio').classList.add('active');
-  $('btnRadio').textContent = '📻 Highland Radio: connecting…';
-  $('srcStatus').textContent = 'buffering the stream (~10 s)…';
-  node.port.postMessage({ t: 'liveStart', cap: Math.floor(ctx.sampleRate * 300) });
-  radio.ctrl = new AbortController();
-  radio.live = false;
-  // Surface progress on screen until audio flows — phones have no console.
-  const note = (msg) => {
-    console.log('[radio]', msg);
-    if (radio.on && !radio.live) $('srcStatus').textContent = 'radio: ' + msg;
+function stripID3(buf) {
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+    const sz = ((buf[6] & 127) << 21) | ((buf[7] & 127) << 14) | ((buf[8] & 127) << 7) | (buf[9] & 127);
+    return buf.slice(10 + sz);
+  }
+  return buf;
+}
+
+async function appendDecoded(bytes, prependDur) {
+  const ab = await ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  let drop = prependDur ? Math.min(ab.length - 1, Math.round(prependDur * ab.sampleRate)) : 0;
+  const nSamp = ab.length - drop;
+  if (nSamp <= 0) return;
+  const mono = new Float32Array(nSamp);
+  for (let c = 0; c < ab.numberOfChannels; c++) {
+    const dd = ab.getChannelData(c);
+    for (let i = 0; i < nSamp; i++) mono[i] += dd[i + drop] / ab.numberOfChannels;
+  }
+  node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
+  if (!stream.live) { stream.live = true; updateTicker(); }
+}
+
+// --- MP3 / ADTS frame scanners: return frame length in bytes at p, or 0 ---
+const MP3_BR = { 1: [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320], 0: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160] };
+const MP3_SR = { 3: [44100,48000,32000], 2: [22050,24000,16000], 0: [11025,12000,8000] };
+function mp3Frame(b, p) {
+  if (p + 4 > b.length) return null;
+  if (b[p] !== 0xFF || (b[p+1] & 0xE0) !== 0xE0) return null;
+  const ver = (b[p+1] >> 3) & 3;             // 0=2.5, 2=MPEG2, 3=MPEG1
+  const layer = (b[p+1] >> 1) & 3;           // 1 = Layer III
+  if (ver === 1 || layer !== 1) return null;
+  const brI = (b[p+2] >> 4) & 15, srI = (b[p+2] >> 2) & 3;
+  if (brI === 0 || brI === 15 || srI === 3) return null;
+  const v1 = ver === 3;
+  const br = MP3_BR[v1 ? 1 : 0][brI] * 1000;
+  const sr = MP3_SR[ver][srI];
+  const pad = (b[p+2] >> 1) & 1;
+  const len = Math.floor((v1 ? 144 : 72) * br / sr) + pad;
+  return len > 4 ? { len, dur: (v1 ? 1152 : 576) / sr } : null;
+}
+function adtsFrame(b, p) {
+  if (p + 7 > b.length) return null;
+  if (b[p] !== 0xFF || (b[p+1] & 0xF6) !== 0xF0) return null;
+  const srI = (b[p+2] >> 2) & 15;
+  const SR = [96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000];
+  if (srI >= SR.length) return null;
+  const len = ((b[p+3] & 3) << 11) | (b[p+4] << 3) | (b[p+5] >> 5);
+  const blocks = (b[p+6] & 3) + 1;
+  return len > 7 ? { len, dur: blocks * 1024 / SR[srI] } : null;
+}
+
+// Splits a byte stream into complete frames; keeps a tail for gapless decode.
+function makeSplitter(kind) {
+  const scan = kind === 'aac' ? adtsFrame : mp3Frame;
+  let buf = new Uint8Array(0);
+  return {
+    /** feed bytes; returns {bytes, dur, prepend} when ~chunkDur s are ready */
+    feed(chunk, chunkDur, tail) {
+      const nb = new Uint8Array(buf.length + chunk.length);
+      nb.set(buf); nb.set(chunk, buf.length);
+      buf = nb;
+      // find first valid frame sync (verify the next frame also syncs)
+      let start = 0;
+      while (start < buf.length - 4) {
+        const f = scan(buf, start);
+        if (f && (start + f.len + 4 > buf.length || scan(buf, start + f.len))) break;
+        start++;
+      }
+      if (start > 0) buf = buf.slice(start);
+      // walk complete frames
+      let p = 0, dur = 0;
+      const marks = [];
+      while (true) {
+        const f = scan(buf, p);
+        if (!f || p + f.len > buf.length) break;
+        p += f.len; dur += f.dur; marks.push(p);
+      }
+      if (dur < chunkDur || marks.length < 3) return null;
+      const bytes = buf.slice(0, p);
+      buf = buf.slice(p);
+      return { bytes, dur };
+    },
   };
-  const opts = { signal: radio.ctrl.signal, cache: 'no-store' };
+}
+
+function stopStream() {
+  stream.gen++;
+  stream.on = false; stream.live = false;
+  if (stream.ctrl) stream.ctrl.abort();
+  stream.ctrl = null;
+}
+
+async function startStream(radio) {
+  await ensureAudio();
+  stopStream();
+  const gen = ++stream.gen;
+  stream.on = true; stream.radio = radio; loaded = true;
+  node.port.postMessage({ t: 'liveStart', cap: Math.floor(ctx.sampleRate * 300) });
+  stream.ctrl = new AbortController();
+  const opts = { signal: stream.ctrl.signal, cache: 'no-store' };
+  const alive = () => stream.on && stream.gen === gen;
   let fails = 0;
-  while (radio.on && fails < 40) {
+
+  while (alive() && fails < 40) {
     try {
-      note(fails ? 'reconnecting (attempt ' + (fails + 1) + ')…' : 'connecting…');
-      // master playlist -> this session's playlist of ~10 s AAC segments
-      const mResp = await fetch(RADIO_HLS, opts);
-      const master = await mResp.text();
-      const mBase = mResp.url.slice(0, mResp.url.lastIndexOf('/') + 1);
-      let child = master.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#')) || '';
-      if (!child) throw new Error('empty master playlist');
-      if (!/^https?:/.test(child)) child = mBase + child;
-      const cBase = child.slice(0, child.lastIndexOf('/') + 1);
-      let seen = new Set();
-      while (radio.on) {
-        const pl = await (await fetch(child, opts)).text();
-        const segs = pl.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-        let fetched = 0;
-        for (const s of segs) {
-          if (seen.has(s)) continue;
-          seen.add(s); fetched++;
-          if (!radio.live) note('buffering segment ' + fetched + '…');
-          const url = /^https?:/.test(s) ? s : cBase + s;
-          let buf = new Uint8Array(await (await fetch(url, opts)).arrayBuffer());
-          // strip an ID3v2 tag if present — some decoders choke on it
-          if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
-            const sz = ((buf[6] & 127) << 21) | ((buf[7] & 127) << 14) | ((buf[8] & 127) << 7) | (buf[9] & 127);
-            buf = buf.slice(10 + sz);
-          }
-          const ab = await ctx.decodeAudioData(buf.buffer);
-          fails = 0;
-          const nSamp = ab.length, mono = new Float32Array(nSamp);
-          for (let c = 0; c < ab.numberOfChannels; c++) {
-            const dd = ab.getChannelData(c);
-            for (let i = 0; i < nSamp; i++) mono[i] += dd[i] / ab.numberOfChannels;
-          }
-          node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
-          if (!radio.live) { radio.live = true; $('btnRadio').textContent = '📻 Highland Radio: live'; }
+      if (radio.kind === 'hls') {
+        // playlist (master or child) -> ~10 s AAC/MP3 segments
+        const mResp = await fetch(radio.url, opts);
+        let plUrl = mResp.url, body = await mResp.text();
+        let base = plUrl.slice(0, plUrl.lastIndexOf('/') + 1);
+        let lines = body.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+        if (!lines.length) throw new Error('empty playlist');
+        if (lines[0].split('?')[0].endsWith('.m3u8')) {           // master -> child
+          plUrl = /^https?:/.test(lines[0]) ? lines[0] : base + lines[0];
+          base = plUrl.slice(0, plUrl.lastIndexOf('/') + 1);
         }
-        // keep the dedup set pruned to the playlist's sliding window
-        seen = new Set(segs.filter(s => seen.has(s)));
-        await new Promise(r => setTimeout(r, fetched ? 5000 : 2500));
+        let seen = new Set();
+        while (alive()) {
+          const pl = await (await fetch(plUrl, opts)).text();
+          const segs = pl.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+          let fetched = 0;
+          for (const s of segs) {
+            if (!alive()) break;
+            if (seen.has(s)) continue;
+            seen.add(s); fetched++;
+            const url = /^https?:/.test(s) ? s : base + s;
+            let buf = stripID3(new Uint8Array(await (await fetch(url, opts)).arrayBuffer()));
+            await appendDecoded(buf, 0);
+            fails = 0;
+          }
+          seen = new Set(segs.filter(s => seen.has(s)));
+          await new Promise(r => setTimeout(r, fetched ? 5000 : 2500));
+        }
+      } else {
+        // icecast: continuous MP3 / ADTS-AAC
+        const resp = await fetch(radio.url, opts);
+        if (!resp.ok || !resp.body) throw new Error('http ' + resp.status);
+        const reader = resp.body.getReader();
+        const splitter = makeSplitter(radio.kind);
+        let tail = null, tailDur = 0;
+        while (alive()) {
+          const { done, value } = await reader.read();
+          if (done) throw new Error('stream ended');
+          const out = splitter.feed(stripID3(value), 4, null);
+          if (out) {
+            let bytes = out.bytes, prependDur = 0;
+            if (tail) {
+              const nb = new Uint8Array(tail.length + bytes.length);
+              nb.set(tail); nb.set(bytes, tail.length);
+              bytes = nb; prependDur = tailDur;
+            }
+            // keep the last ~0.4 s of frames as the next chunk's warm-up
+            const scan = radio.kind === 'aac' ? adtsFrame : mp3Frame;
+            let p = 0, cut = 0, cutDur = 0, durSoFar = 0;
+            const frames = [];
+            while (p < out.bytes.length) {
+              const f = scan(out.bytes, p);
+              if (!f) break;
+              frames.push([p, f.len, f.dur]); p += f.len;
+            }
+            let acc = 0;
+            for (let i = frames.length - 1; i >= 0; i--) {
+              acc += frames[i][2];
+              if (acc >= 0.4) { cut = frames[i][0]; cutDur = acc; break; }
+            }
+            tail = cut ? out.bytes.slice(cut) : null;
+            tailDur = cut ? cutDur : 0;
+            await appendDecoded(bytes, prependDur);
+            fails = 0;
+          }
+        }
       }
     } catch (e) {
-      if (!radio.on || e.name === 'AbortError') break;
-      note('connection hiccup — reconnecting…');
+      if (!alive() || e.name === 'AbortError') break;
     }
     fails++;
-    if (radio.on) await new Promise(r => setTimeout(r, Math.min(fails * 1500, 10000)));
+    if (alive()) await new Promise(r => setTimeout(r, Math.min(fails * 1500, 10000)));
   }
-  if (radio.on && fails >= 40) { $('srcStatus').textContent = 'radio stream failed — tap GO to retry'; stopRadio(); }
+  if (alive() && fails >= 40) { setTicker('stream lost — tap the dot again to retry'); stopStream(); }
 }
 
-function stopRadio() {
-  if (!radio.on) return;
-  radio.on = false;
-  if (radio.ctrl) radio.ctrl.abort();
-  $('btnRadio').classList.remove('active');
-  $('btnRadio').textContent = '📻 Highland Radio live';
+// ---------------------------------------------------------------
+// Tide readers — one per source, all returning {min, max, level, time, prev}
+// calibrated on the last ~25 h (2nd/98th percentile so one glitchy reading
+// can't flatten the range).
+// ---------------------------------------------------------------
+const EA = 'https://environment.data.gov.uk/flood-monitoring';
+const IE_ERDDAP = 'https://erddap.marine.ie/erddap/tabledap/IrishNationalTideGaugeNetwork.json';
+const QLD = 'https://www.data.qld.gov.au/api/3/action';
+const QLD_RES = '7afe7233-fae0-4024-bc98-3a72f05675bd';
+const IOC = 'https://www.ioc-sealevelmonitoring.org/service.php';
+
+function pct(sorted, q) { return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(q * sorted.length)))]; }
+function calib(series) {
+  // series: [{v, t(ms)}] oldest→newest
+  if (series.length < 10) throw new Error('too few readings');
+  const vals = series.map(r => r.v).sort((a, b) => a - b);
+  const last = series[series.length - 1];
+  const hourAgo = last.t - 3600 * 1000;
+  let prev = null;
+  for (let i = series.length - 1; i >= 0; i--) if (series[i].t <= hourAgo) { prev = series[i].v; break; }
+  return { min: pct(vals, 0.02), max: pct(vals, 0.98), level: last.v, time: last.t, prev };
 }
 
-$('btnRadio').onclick = () => { radio.on ? stopRadio() : startRadio(); };
+async function readTide(st) {
+  if (st.src === 'ie') {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
+    const url = IE_ERDDAP + '?station_id,time,Water_Level_OD_Malin&station_id=%22' + encodeURIComponent(st.id) + '%22&time%3E=' + since;
+    const d = await (await fetch(url)).json();
+    const rows = (d.table.rows || []).filter(r => typeof r[2] === 'number');
+    return calib(rows.map(r => ({ v: r[2], t: Date.parse(r[1]) })));
+  }
+  if (st.src === 'uk') {
+    const d = await (await fetch(EA + '/id/stations/' + st.id + '/readings?_sorted&_limit=100')).json();
+    const items = (d.items || []).filter(x => typeof x.value === 'number').reverse();
+    return calib(items.map(x => ({ v: x.value, t: Date.parse(x.dateTime) })));
+  }
+  if (st.src === 'au') {
+    const q = QLD + '/datastore_search?resource_id=' + QLD_RES +
+      '&filters=' + encodeURIComponent(JSON.stringify({ Site: st.id })) +
+      '&sort=' + encodeURIComponent('Seconds desc') + '&limit=150';
+    const d = await (await fetch(q)).json();
+    const recs = (d.result.records || [])
+      .map(r => ({ v: parseFloat(r['Water Level']), t: Date.parse(r.DateTime + '+10:00') }))
+      .filter(r => isFinite(r.v) && r.v > -90)
+      .reverse();
+    return calib(recs);
+  }
+  // IOC: rows carry a sensor tag; use the sensor with the most readings
+  const d = await (await fetch(IOC + '?query=data&code=' + encodeURIComponent(st.id) + '&period=2')).json();
+  const bySensor = {};
+  for (const r of d) {
+    if (typeof r.slevel !== 'number') continue;
+    (bySensor[r.sensor] = bySensor[r.sensor] || []).push({ v: r.slevel, t: Date.parse(r.stime.replace(' ', 'T') + 'Z') });
+  }
+  const best = Object.values(bySensor).sort((a, b) => b.length - a.length)[0] || [];
+  best.sort((a, b) => a.t - b.t);
+  const cutoff = Date.now() - 25 * 3600 * 1000;
+  return calib(best.filter(r => r.t >= cutoff && isFinite(r.t)));
+}
+
+// ---------------------------------------------------------------
+// Station data + selection
+// ---------------------------------------------------------------
+let DATA = null;                       // {countries, stations}
+let selected = null;                   // current gauge object
+let tide = null;                       // latest reading for the ticker
+let lastPoll = 0;
+
+async function loadData() {
+  const d = await (await fetch('stations.json', { cache: 'no-store' })).json();
+  DATA = d;
+  for (const s of DATA.stations) {
+    s.px = 0; s.py = 0;                // projected, filled per frame
+  }
+  const n = DATA.stations.filter(s => s.radio).length;
+  setTicker(n + ' tide gauges with a local radio pairing, ' + Object.keys(d.countries).length +
+    ' countries — tap a dot to begin');
+  requestDraw();
+}
+function countryName(cc) { return (DATA && DATA.countries[cc]) || cc; }
+
+async function selectStation(st) {
+  // every gauge plays radio: if this one has no pairing (shouldn't happen
+  // with baked data), borrow the nearest gauge's station
+  if (!st.radio && DATA) {
+    let best = null, bd = 1e18;
+    for (const o of DATA.stations) {
+      if (!o.radio) continue;
+      const dx = o.lon - st.lon, dy = o.lat - st.lat;
+      const dd = dx * dx + dy * dy;
+      if (dd < bd) { bd = dd; best = o; }
+    }
+    if (best) st.radio = best.radio;
+  }
+  selected = st;
+  tide = null; lastPoll = 0;
+  location.hash = 's=' + st.src + ':' + encodeURIComponent(st.id);
+  playing = true;
+  $('btnMaster').textContent = '◼';
+  $('btnMaster').classList.add('playing');
+  $('liveTag').classList.add('on');
+  setTicker('tuning: ' + (st.radio ? st.radio.name : 'wave noise') + ' × the ' + st.name + ' tide — buffering ~10 s…');
+  await ensureAudio();
+  await ctx.resume();
+  node.port.postMessage({ t: 'play' });
+  if (st.radio) startStream(st.radio);
+  pollNow();
+  updateHud();
+}
+
+function masterStop() {
+  playing = false;
+  stopStream();
+  if (node) node.port.postMessage({ t: 'stop' });
+  $('btnMaster').textContent = '▶';
+  $('btnMaster').classList.remove('playing');
+  $('liveTag').classList.remove('on');
+  updateTicker();
+}
+$('btnMaster').onclick = async () => {
+  if (playing) { masterStop(); return; }
+  if (selected) { await selectStation(selected); return; }
+  // nothing chosen yet: play the original piece — Highland Radio on Buncrana
+  const st = DATA && DATA.stations.find(s => s.src === 'ie' && /Buncran/i.test(s.name));
+  if (st) await selectStation(st);
+};
+
+async function pollNow() {
+  if (!selected) return;
+  const st = selected;
+  lastPoll = Date.now();
+  try {
+    const t = await readTide(st);
+    if (selected !== st) return;
+    tide = t;
+    const frac = Math.min(1, Math.max(0, (t.level - t.min) / Math.max(t.max - t.min, 0.01)));
+    const lo = +$('tideMin').value, hi = +$('tideMax').value;
+    const s = hi - (hi - lo) * frac;          // high water -> low stretch
+    $('stretch').value = stretchToSlider(s);
+    sendStretch();
+    updateTicker();
+  } catch (e) {
+    if (selected === st) { tide = null; updateTicker('(tide gauge quiet — holding the last stretch)'); }
+  }
+}
+setInterval(() => {
+  if (selected && playing && Date.now() - lastPoll > 5 * 60 * 1000) pollNow();
+}, 5000);
+
+// ---------------------------------------------------------------
+// Ticker
+// ---------------------------------------------------------------
+let tickerRaw = '';
+function setTicker(txt) { tickerRaw = txt; renderTicker(); }
+function updateTicker(extra) {
+  if (!selected) { renderTicker(); return; }
+  const st = selected, parts = [];
+  const radioName = st.radio ? st.radio.name : 'built-in wave noise';
+  parts.push('<b>' + esc(radioName) + '</b>' +
+    (st.radio && st.radio.dist_km > 0 ? ' (' + st.radio.dist_km + ' km from the gauge)' : '') +
+    ' on the <b>' + esc(st.name) + '</b> tide, ' + esc(countryName(st.country)));
+  if (tide) {
+    const dir = tide.prev == null ? '' : (tide.level > tide.prev + 0.02 ? ', rising' : (tide.level < tide.prev - 0.02 ? ', falling' : ', slack'));
+    const age = Math.max(0, Math.round((Date.now() - tide.time) / 60000));
+    parts.push('water ' + tide.level.toFixed(2) + ' m' + dir + ' (' + age + ' min ago)');
+  }
+  parts.push('stretch ' + actualStretch.toFixed(1) + '×');
+  if (stream.on && stream.live && streamLag > 1) {
+    parts.push('hearing the radio from ' + (streamLag < 90 ? Math.round(streamLag) + ' s' : (streamLag / 60).toFixed(1) + ' min') + ' ago');
+  } else if (stream.on && !stream.live) {
+    parts.push('buffering the stream…');
+  }
+  if (extra) parts.push(extra);
+  tickerRaw = parts.join('<span class="sep">·</span>');
+  renderTicker();
+}
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+// marquee: continuous crawl, JS-driven so text swaps don't jump
+let tickX = null;
+function renderTicker() { $('tickerText').innerHTML = tickerRaw; }
+setInterval(() => {
+  const el = $('tickerText'), clip = $('tickerClip');
+  const w = el.offsetWidth, cw = clip.offsetWidth;
+  if (w <= cw - 20) { el.style.left = '12px'; tickX = null; return; }
+  if (tickX === null || tickX < -w) tickX = cw;
+  tickX -= 1;
+  el.style.left = tickX + 'px';
+}, 30);
+setInterval(() => { if (selected && playing) updateTicker(); }, 10000);
+
+// ---------------------------------------------------------------
+// The pixel map — an animated dithered ocean with glowing landmass
+// outlines and one dot per tide gauge. Equirectangular, wrap-aware.
+// ---------------------------------------------------------------
+const map = $('map');
+const mctx = map.getContext('2d');
+let LW = 320, LH = 160;                       // logical pixel grid
+let view = { lon0: -180, lonSpan: 360, latTop: 84, latSpan: 84 - (-70) };
+let viewLevel = 0;                            // 0 = world, 1 = region
+let anim = null;                              // view animation
+let WORLD = null;                             // geojson
+let landMask = null, edgeDist = null;         // Uint8 per logical pixel
+let maskDirty = true;
+let mt = 0;                                   // ocean time
+let hover = null;
+
+const PAL = [
+  [244, 250, 252], [214, 236, 244], [176, 214, 234], [130, 184, 216], [96, 156, 200],
+  [224, 248, 240], [150, 224, 200], [96, 200, 172], [56, 172, 146], [32, 140, 122],
+  [30, 110, 140], [22, 84, 118], [16, 60, 96], [12, 42, 72],
+  [10, 24, 40], [18, 38, 58], [26, 52, 76],            // land darks
+];
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v / 16 - 0.5) * 26);
+const palLUT = new Uint8Array(32768);         // 5-bit rgb -> palette index (+1; 0 = empty)
+function palIdx(r, g, b) {
+  r = r < 0 ? 0 : r > 255 ? 255 : r; g = g < 0 ? 0 : g > 255 ? 255 : g; b = b < 0 ? 0 : b > 255 ? 255 : b;
+  const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+  let v = palLUT[key];
+  if (!v) {
+    let bi = 0, bd = 1e9;
+    for (let i = 0; i < PAL.length; i++) {
+      const p = PAL[i];
+      const dd = (r - p[0]) * (r - p[0]) + (g - p[1]) * (g - p[1]) * 1.4 + (b - p[2]) * (b - p[2]);
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    v = bi + 1; palLUT[key] = v;
+  }
+  return v - 1;
+}
+
+function resizeMap() {
+  const w = map.clientWidth, h = map.clientHeight;
+  LW = w >= h ? 320 : 240;                    // portrait: keep the pixel budget sane
+  LH = Math.max(90, Math.round(LW * h / Math.max(w, 1)));
+  if (LW * LH > 90000) { const k = Math.sqrt(90000 / (LW * LH)); LW = Math.round(LW * k); LH = Math.round(LH * k); }
+  map.width = LW; map.height = LH;
+  fitWorld();
+  maskDirty = true;
+  requestDraw();
+}
+function worldView() {
+  // world view: lon [-180,180], lat window matched to the canvas aspect,
+  // centred a touch north of the equator, never past the poles
+  const canvAspect = LW / LH;
+  const latSpan = Math.min(175, 360 / canvAspect);
+  const latTop = Math.min(88, 12 + latSpan / 2);
+  return { lon0: -180, lonSpan: 360, latTop, latSpan };
+}
+function fitWorld() {
+  if (viewLevel === 0 && !anim) view = worldView();
+}
+window.addEventListener('resize', resizeMap);
+
+function proj(lon, lat) {
+  let dl = lon - view.lon0;
+  dl = ((dl % 360) + 360) % 360;
+  return [dl / view.lonSpan * LW, (view.latTop - lat) / view.latSpan * LH];
+}
+function unproj(x, y) {
+  let lon = view.lon0 + x / LW * view.lonSpan;
+  lon = ((lon + 540) % 360) - 180;
+  return [lon, view.latTop - y / LH * view.latSpan];
+}
+
+// scanline-fill the land polygons into landMask, then edge/glow distances
+function rasterise() {
+  landMask = new Uint8Array(LW * LH);
+  if (!WORLD) return;
+  for (const f of WORLD.features) {
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const poly of polys) {
+      for (const ring of poly) {
+        // unwrap longitudes so the ring is continuous (no dateline jumps),
+        // then rasterise it at -360/0/+360 so every copy visible in the
+        // current window gets filled with correct parity
+        const pxPerLon = LW / view.lonSpan;
+        let prev = ring[0][0], acc = 0;
+        const lonsU = ring.map(c => {
+          const d = c[0] - prev;
+          if (d > 180) acc -= 360; else if (d < -180) acc += 360;
+          prev = c[0];
+          return c[0] + acc;
+        });
+        // one shift for the whole ring: drop its first point into [lon0, lon0+360)
+        const rel0 = lonsU[0] - view.lon0;
+        const shift = (((rel0 % 360) + 360) % 360) - rel0;
+        const pts = ring.map((c, i) => [
+          (lonsU[i] + shift - view.lon0) * pxPerLon,
+          (view.latTop - c[1]) / view.latSpan * LH,
+        ]);
+        // a ring that circles the globe (Antarctica) can't be filled with
+        // wrap parity — close it via the south pole instead: coast path,
+        // then straight down below the canvas and back
+        let uMin0 = 1e9, uMax0 = -1e9;
+        for (const u of lonsU) { if (u < uMin0) uMin0 = u; if (u > uMax0) uMax0 = u; }
+        const fullCircle = uMax0 - uMin0 >= 359;
+        if (fullCircle) {
+          const yPole = (view.latTop + 90.5) / view.latSpan * LH;   // just past the pole
+          pts.push([pts[pts.length - 1][0], yPole], [pts[0][0], yPole]);
+        }
+        // tight y range for speed
+        let yMin = LH, yMax = -1;
+        for (const p of pts) { if (p[1] < yMin) yMin = p[1]; if (p[1] > yMax) yMax = p[1]; }
+        yMin = Math.max(0, Math.floor(yMin)); yMax = Math.min(LH - 1, Math.ceil(yMax));
+        const offsets = fullCircle ? [0] : [-360 * pxPerLon, 0, 360 * pxPerLon];
+        for (const off of offsets) {
+          // skip copies fully outside the canvas
+          let xMin = 1e9, xMax = -1e9;
+          for (const p of pts) { const x = p[0] + off; if (x < xMin) xMin = x; if (x > xMax) xMax = x; }
+          if (xMax < 0 || xMin > LW) continue;
+          for (let y = yMin; y <= yMax; y++) {
+            const yc = y + 0.5, xs = [];
+            for (let i = 0; i < pts.length; i++) {
+              const a = pts[i], b = pts[(i + 1) % pts.length];
+              if ((a[1] <= yc) !== (b[1] <= yc)) {
+                xs.push(a[0] + off + (yc - a[1]) / (b[1] - a[1]) * (b[0] - a[0]));
+              }
+            }
+            xs.sort((p, q) => p - q);
+            for (let k = 0; k + 1 < xs.length; k += 2) {
+              const x0 = Math.max(0, Math.ceil(xs[k] - 0.5)), x1 = Math.min(LW - 1, Math.floor(xs[k + 1] - 0.5));
+              for (let x = x0; x <= x1; x++) landMask[y * LW + x] ^= 1;   // even-odd
+            }
+          }
+        }
+      }
+    }
+  }
+  // edge distance into the sea: 0 = land, 1 = coast water, 2..3 glow falloff
+  edgeDist = new Uint8Array(LW * LH).fill(255);
+  let frontier = [];
+  for (let i = 0; i < landMask.length; i++) if (landMask[i]) { edgeDist[i] = 0; frontier.push(i); }
+  for (let d = 1; d <= 3 && frontier.length; d++) {
+    const next = [];
+    for (const i of frontier) {
+      const x = i % LW, y = (i / LW) | 0;
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= LW || ny < 0 || ny >= LH) continue;
+        const j = ny * LW + nx;
+        if (edgeDist[j] === 255) { edgeDist[j] = d; next.push(j); }
+      }
+    }
+    frontier = next;
+  }
+  maskDirty = false;
+}
+
+let mimg = null;
+let drawQueued = false;
+function requestDraw() { drawQueued = true; }
+
+function drawMap() {
+  if (!mimg || mimg.width !== LW || mimg.height !== LH) mimg = mctx.createImageData(LW, LH);
+  if (maskDirty) rasterise();
+  const d = mimg.data;
+  const t = mt;
+  const waveAmp = 0.5 + 0.9 * tideFrac;               // tide in -> livelier sea
+  const glowPulse = 0.75 + 0.25 * Math.sin(t * 0.35);
+  for (let y = 0; y < LH; y++) {
+    const vy = y / LH;
+    for (let x = 0; x < LW; x++) {
+      const i = y * LW + x;
+      let r, g, b;
+      const ed = edgeDist ? edgeDist[i] : 255;
+      if (ed === 0) {
+        // land: dark plateau with a whisper of texture
+        const n = Math.sin(x * 0.9 + y * 1.7) * 3;
+        r = 16 + n; g = 34 + n; b = 52 + n;
+      } else {
+        // open ocean: deep gradient + two crossing swells + drifting crests
+        const sw = waveAmp * (Math.sin(x * 0.11 + t * 1.05 + Math.sin(y * 0.21) * 1.6)
+                 + 0.8 * Math.sin(x * 0.043 - t * 0.62 + y * 0.05));
+        const depth = 0.35 + 0.5 * vy;
+        r = 40 - 26 * depth + 7 * sw;
+        g = 150 - 96 * depth + 11 * sw;
+        b = 150 - 66 * depth + 9 * sw;
+        // sparse foam flecks that crawl with the sea — kept dim so they can
+        // never be mistaken for the amber gauge dots
+        const hf = Math.sin(x * 12.9898 + y * 78.233 + Math.floor(t * 1.1) * 37.7) * 43758.5453;
+        if (hf - Math.floor(hf) > 0.997 - 0.001 * tideFrac) { r += 34; g += 30; b += 26; }
+        // coast glow
+        if (ed <= 3) {
+          const w = glowPulse * (ed === 1 ? 0.55 : ed === 2 ? 0.3 : 0.14);
+          r += (95 - r) * w + 60 * w; g += (212 - g) * w; b += (196 - b) * w;
+        }
+      }
+      const dith = BAYER[(x & 3) + ((y & 3) << 2)];
+      const pi = palIdx(r + dith, g + dith, b + dith);
+      const p = PAL[pi], o = i * 4;
+      d[o] = p[0]; d[o + 1] = p[1]; d[o + 2] = p[2]; d[o + 3] = 255;
+    }
+  }
+  // coastline outline pixels (land next to sea) in pale teal
+  if (edgeDist) {
+    for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) {
+      const i = y * LW + x;
+      if (edgeDist[i] !== 0) continue;
+      const seaN = (x > 0 && edgeDist[i-1] > 0) || (x < LW-1 && edgeDist[i+1] > 0) ||
+                   (y > 0 && edgeDist[i-LW] > 0) || (y < LH-1 && edgeDist[i+LW] > 0);
+      if (seaN) { const o = i * 4; d[o] = 150; d[o+1] = 224; d[o+2] = 200; }
+    }
+  }
+  mctx.putImageData(mimg, 0, 0);
+  drawDots();
+  mt += 0.1 * (0.15 + 2.2 / Math.max(actualStretch, 1));   // the sea slows with the sound
+}
+
+function drawDots() {
+  if (!DATA) return;
+  const zoomed = viewLevel === 1;
+  const pulse = (Math.sin(mt * 2.2) + 1) / 2;
+  for (const s of DATA.stations) {
+    const [x, y] = proj(s.lon, s.lat);
+    s.px = x; s.py = y;
+    if (x < -2 || x > LW + 2 || y < -2 || y > LH + 2) continue;
+    const xi = Math.round(x), yi = Math.round(y);
+    const isSel = s === selected;
+    const isHov = s === hover;
+    // gauges are always warm amber — nothing else on the map is
+    if (isSel) {
+      mctx.fillStyle = pulse > 0.5 ? '#ff3b30' : '#ff8a80';
+      mctx.fillRect(xi - 1, yi - 1, 3, 3);
+      mctx.fillStyle = '#fff';
+      mctx.fillRect(xi, yi, 1, 1);
+    } else if (zoomed || isHov) {
+      mctx.fillStyle = 'rgba(255,178,64,' + (0.3 + 0.3 * pulse) + ')';
+      mctx.fillRect(xi - 1, yi - 1, 3, 3);
+      mctx.fillStyle = isHov ? '#ffffff' : '#ffd27f';
+      mctx.fillRect(xi, yi, 1, 1);
+    } else {
+      mctx.fillStyle = 'rgba(255,178,64,' + (0.25 + 0.3 * pulse) + ')';
+      mctx.fillRect(xi - 1, yi, 3, 1);
+      mctx.fillRect(xi, yi - 1, 1, 3);
+      mctx.fillStyle = '#ffd27f';
+      mctx.fillRect(xi, yi, 1, 1);
+    }
+  }
+}
+
+setInterval(() => { drawMap(); }, 100);
+
+// --- view animation ---
+function animateTo(target, level, ms) {
+  const from = { ...view };
+  const t0 = performance.now();
+  viewLevel = level;
+  anim = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    const e = 1 - Math.pow(1 - k, 3);                  // ease-out cubic
+    // interpolate on log scale for span (zoomy feel)
+    view = {
+      lon0: from.lon0 + shortestLonDelta(from.lon0, target.lon0) * e,
+      lonSpan: Math.exp(Math.log(from.lonSpan) + (Math.log(target.lonSpan) - Math.log(from.lonSpan)) * e),
+      latTop: from.latTop + (target.latTop - from.latTop) * e,
+      latSpan: Math.exp(Math.log(from.latSpan) + (Math.log(target.latSpan) - Math.log(from.latSpan)) * e),
+    };
+    maskDirty = true;
+    if (k >= 1) anim = null;
+  };
+}
+function shortestLonDelta(a, b) {
+  let d = b - a;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+setInterval(() => { if (anim) { anim(); syncLevel(); } }, 100);
+
+// zoom state is derived from how far in we are, not a fixed two-step ladder
+function syncLevel() {
+  viewLevel = view.lonSpan < 100 ? 1 : 0;
+  $('btnBack').style.display = view.lonSpan < 300 ? 'block' : 'none';
+}
+
+function clampView(v) {
+  v.lonSpan = Math.min(360, Math.max(3, v.lonSpan));
+  v.latSpan = Math.min(176, Math.max(3 * LH / LW, v.latSpan));
+  if (v.latTop > 88) v.latTop = 88;
+  if (v.latTop - v.latSpan < -88) v.latTop = -88 + v.latSpan;
+  return v;
+}
+
+// zoom by a factor keeping the point under (x,y) logical px fixed
+function zoomBy(f, x, y) {
+  anim = null;
+  const [lon, lat] = unproj(x, y);
+  const lonSpan = view.lonSpan * f;
+  const latSpan = view.latSpan * f;
+  view = clampView({
+    lonSpan, latSpan,
+    lon0: lon - x / LW * lonSpan,
+    latTop: lat + y / LH * latSpan,
+  });
+  maskDirty = true;
+  syncLevel();
+}
+
+$('btnZin').onclick = () => zoomBy(0.5, LW / 2, LH / 2);
+$('btnZout').onclick = () => zoomBy(2, LW / 2, LH / 2);
+
+// trackpad pinch (wheel + ctrlKey on Macs) and two-finger scroll both zoom
+map.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  const [x, y] = canvasPos(ev);
+  const f = Math.exp(ev.deltaY * (ev.ctrlKey ? 0.012 : 0.0025));
+  zoomBy(f, x, y);
+}, { passive: false });
+
+// touch pinch
+const pointers = new Map();
+let lastPinch = 0;
+map.addEventListener('pointerdown', ev => { if (ev.pointerType === 'touch') pointers.set(ev.pointerId, [ev.clientX, ev.clientY]); });
+map.addEventListener('pointermove', ev => {
+  if (ev.pointerType !== 'touch' || !pointers.has(ev.pointerId)) return;
+  if (pointers.size === 2) {
+    const old = [...pointers.values()];
+    const d0 = Math.hypot(old[0][0] - old[1][0], old[0][1] - old[1][1]);
+    pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    const cur = [...pointers.values()];
+    const d1 = Math.hypot(cur[0][0] - cur[1][0], cur[0][1] - cur[1][1]);
+    if (d0 > 10 && d1 > 10) {
+      const r = map.getBoundingClientRect();
+      const mx = (cur[0][0] + cur[1][0]) / 2 - r.left, my = (cur[0][1] + cur[1][1]) / 2 - r.top;
+      zoomBy(d0 / d1, mx / r.width * LW, my / r.height * LH);
+      lastPinch = Date.now();
+    }
+  } else {
+    pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+  }
+});
+for (const evn of ['pointerup', 'pointercancel', 'pointerleave']) {
+  map.addEventListener(evn, ev => pointers.delete(ev.pointerId));
+}
+
+// --- interaction ---
+function nearestStation(x, y, maxPx) {
+  if (!DATA) return null;
+  let best = null, bd = maxPx * maxPx;
+  for (const s of DATA.stations) {
+    const dx = s.px - x, dy = s.py - y;
+    const dd = dx * dx + dy * dy;
+    if (dd < bd) { bd = dd; best = s; }
+  }
+  return best;
+}
+
+function canvasPos(ev) {
+  const r = map.getBoundingClientRect();
+  const cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+  const cy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
+  return [cx / r.width * LW, cy / r.height * LH];
+}
+
+map.addEventListener('click', async (ev) => {
+  if (Date.now() - lastPinch < 400) return;          // tail end of a pinch
+  const [x, y] = canvasPos(ev);
+  $('hint').style.opacity = 0;
+  if (viewLevel === 0) {
+    // find the cluster around the click and zoom to it
+    const st = nearestStation(x, y, 30);
+    if (!st) return;
+    const nearby = DATA.stations.filter(s => {
+      const dx = s.px - st.px, dy = s.py - st.py;
+      return dx * dx + dy * dy < 14 * 14;
+    });
+    const cluster = nearby.length ? nearby : [st];
+    let lats = cluster.map(s => s.lat), lons = cluster.map(s => s.lon);
+    // wrap-aware lon bbox: recentre on the clicked station
+    const c = st.lon;
+    lons = lons.map(l => { let d = l - c; while (d > 180) d -= 360; while (d < -180) d += 360; return c + d; });
+    let lonMin = Math.min(...lons), lonMax = Math.max(...lons);
+    let latMin = Math.min(...lats), latMax = Math.max(...lats);
+    let lonSpan = Math.min(45, Math.max(14, (lonMax - lonMin) * 1.4));
+    let latSpan = Math.min(30, Math.max(9, (latMax - latMin) * 1.4));
+    // match canvas aspect
+    const aspect = LW / LH;
+    if (lonSpan / latSpan > aspect) latSpan = lonSpan / aspect; else lonSpan = latSpan * aspect;
+    animateTo({
+      lon0: (lonMin + lonMax) / 2 - lonSpan / 2,
+      lonSpan,
+      latTop: Math.min(86, (latMin + latMax) / 2 + latSpan / 2),
+      latSpan,
+    }, 1, 700);
+    $('btnBack').style.display = 'block';
+    updateHud();
+  } else {
+    const st = nearestStation(x, y, 14);
+    if (st) { await selectStation(st); return; }
+    // empty water: zoom in a bit more around the click
+    if (view.lonSpan > 8) {
+      const [lon, lat] = unproj(x, y);
+      const lonSpan = view.lonSpan / 2, latSpan = view.latSpan / 2;
+      animateTo({ lon0: lon - lonSpan / 2, lonSpan, latTop: Math.min(86, lat + latSpan / 2), latSpan }, 1, 500);
+    }
+  }
+});
+
+map.addEventListener('mousemove', (ev) => {
+  const [x, y] = canvasPos(ev);
+  const st = nearestStation(x, y, viewLevel === 0 ? 5 : 12);
+  hover = st;
+  const tip = $('tip');
+  if (st) {
+    const r = map.getBoundingClientRect();
+    tip.style.display = 'block';
+    tip.style.left = Math.min(r.width - 270, st.px / LW * r.width + 12) + 'px';
+    tip.style.top = Math.max(6, st.py / LH * r.height - 14) + 'px';
+    tip.innerHTML = '<b>' + esc(st.name) + '</b> — ' + esc(countryName(st.country)) +
+      '<div class="r">' + (st.radio ? '📻 ' + esc(st.radio.name) + (st.radio.dist_km > 0 ? ' · ' + st.radio.dist_km + ' km away' : '') : '📻 nearest reachable station') + '</div>';
+    map.style.cursor = 'pointer';
+  } else {
+    tip.style.display = 'none';
+    map.style.cursor = 'crosshair';
+  }
+});
+map.addEventListener('mouseleave', () => { hover = null; $('tip').style.display = 'none'; });
+
+$('btnBack').onclick = () => {
+  $('btnBack').style.display = 'none';
+  viewLevel = 0;
+  animateTo(worldView(), 0, 700);
+  updateHud();
+};
+
+function updateHud() {
+  if (selected) {
+    $('hudSub').textContent = (selected.radio ? selected.radio.name : 'wave noise') + ' · ' + selected.name + ', ' + countryName(selected.country);
+  } else {
+    $('hudSub').textContent = 'local radio, slowed down by the local sea';
+  }
+}
+
+// deep link: #s=src:id
+function applyHash() {
+  const m = location.hash.match(/s=([a-z]+):(.+)$/);
+  if (!m || !DATA) return;
+  const st = DATA.stations.find(s => s.src === m[1] && s.id === decodeURIComponent(m[2]));
+  if (st) {
+    selected = st;
+    updateHud();
+    setTicker('<b>' + esc(st.radio ? st.radio.name : 'wave noise') + '</b> × the <b>' + esc(st.name) + '</b> tide — press ▶ to begin');
+    // zoom to it
+    const aspect = LW / LH;
+    const latSpan = 18, lonSpan = latSpan * aspect;
+    animateTo({ lon0: st.lon - lonSpan / 2, lonSpan, latTop: st.lat + latSpan / 2, latSpan }, 1, 900);
+    $('btnBack').style.display = 'block';
+    $('hint').style.opacity = 0;
+  }
+}
+
+// ---------------------------------------------------------------
+// Lab wiring (manual mode)
+// ---------------------------------------------------------------
+$('labLink').onclick = () => { $('labScreen').style.display = 'block'; };
+$('btnLabClose').onclick = () => { $('labScreen').style.display = 'none'; };
 
 async function loadFile(file) {
   await ensureAudio();
@@ -574,6 +1396,7 @@ async function loadFile(file) {
   for (let c = 0; c < Math.min(audio.numberOfChannels, 2); c++) {
     chs.push(new Float32Array(audio.getChannelData(c)));
   }
+  selected = null; masterStop();
   loadChannels(chs, file.name + ' (' + audio.duration.toFixed(1) + ' s)');
 }
 
@@ -590,7 +1413,6 @@ async function loadDemo() {
   const src = off.createBufferSource(); src.buffer = nb;
   const lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.5;
   const g = off.createGain();
-  // three overlapping swells per loop, like sets of waves
   g.gain.setValueAtTime(0.15, 0);
   for (let t = 0; t < dur; t += 0.25) {
     const swell = 0.25 + 0.75 * Math.pow(Math.max(0, Math.sin(2 * Math.PI * t / 8) * 0.6 + Math.sin(2 * Math.PI * t / 13.7 + 1) * 0.4), 2);
@@ -602,11 +1424,12 @@ async function loadDemo() {
   src.connect(lp).connect(g).connect(off.destination); src.start();
   const rendered = await off.startRendering();
   const chs = [new Float32Array(rendered.getChannelData(0)), new Float32Array(rendered.getChannelData(1))];
-  loadChannels(chs, 'built-in wave noise (24 s loop)');
+  node.port.postMessage({ t: 'load', ch: chs }, chs.map(a => a.buffer));
+  loaded = true;
+  $('srcStatus').innerHTML = 'loaded: <b>built-in wave noise (24 s loop)</b>';
 }
 
-// --- UI wiring ---
-$('btnDemo').onclick = () => loadDemo();
+$('btnDemo').onclick = async () => { selected = null; masterStop(); await loadDemo(); };
 $('stretch').oninput = sendStretch;
 $('glide').onchange = sendGlide;
 $('vol').oninput = () => { if (gain) gain.gain.value = Math.pow(+$('vol').value / 100, 1.6); };
@@ -614,38 +1437,12 @@ $('winSize').onchange = () => { if (node) node.port.postMessage({ t: 'win', v: +
 
 $('btnPlay').onclick = async () => {
   await ensureAudio();
-  if (!loaded && !radio.on) await loadDemo();
+  if (!loaded && !stream.on) await loadDemo();
   await ctx.resume();
   playing = !playing;
   node.port.postMessage({ t: playing ? 'play' : 'stop' });
   $('btnPlay').textContent = playing ? '⏸ Stop' : '▶ Play';
   $('status').textContent = playing ? 'playing — move the slider or switch the tide on' : '';
-};
-
-// --- the one-tap GO button: radio + play + live tide in a single gesture ---
-$('btnGo').onclick = async () => {
-  if (playing) {
-    // stop the machine
-    stopRadio();
-    playing = false;
-    node.port.postMessage({ t: 'stop' });
-    if (tideMode !== 'off') setMode(tideMode);          // toggles current mode off
-    $('btnPlay').textContent = '▶ Play';
-    $('btnGo').textContent = '▶ GO — Highland Radio on the Buncrana tide';
-    $('goStatus').textContent = '';
-    $('status').textContent = '';
-    return;
-  }
-  await ensureAudio();
-  await ctx.resume();                                   // inside the tap = allowed on mobile
-  if (!radio.on) startRadio();                          // runs its own reconnect loop
-  playing = true;
-  node.port.postMessage({ t: 'play' });
-  if (tideMode !== 'live') setMode('live');
-  $('btnPlay').textContent = '⏸ Stop';
-  $('btnGo').textContent = '◼ Stop';
-  $('goStatus').textContent = 'buffering the radio — sound begins in ~10 s, then drifts on the tide';
-  setTimeout(() => { if (playing) $('goStatus').textContent = ''; }, 20000);
 };
 
 // file drop
@@ -656,279 +1453,31 @@ $('file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); 
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
 
-// --- tide signal (simulated + live) ---
-// Runs on setInterval, NOT requestAnimationFrame: rAF freezes in background
-// tabs, and this is meant to be left running in one.
-let tideMode = 'off';                  // 'off' | 'sim' | 'live'
-let tideStart = 0;
-let live = { lastPoll: 0, station: 'ie:Buncranna', name: 'Buncranna (IE)' };
-const QLD = 'https://www.data.qld.gov.au/api/3/action';
-const QLD_RES = '7afe7233-fae0-4024-bc98-3a72f05675bd';   // Coastal Data System — near real time storm tide
-const EA = 'https://environment.data.gov.uk/flood-monitoring';
-const IE = 'https://erddap.marine.ie/erddap/tabledap/IrishNationalTideGaugeNetwork.json';
-
-function setMode(m) {
-  tideMode = (tideMode === m) ? 'off' : m;
+// simulated tide (lab only) — setInterval so it survives background tabs
+let simOn = false, tideStart = 0;
+$('btnTide').onclick = () => {
+  simOn = !simOn;
   tideStart = Date.now();
-  $('btnTide').textContent = 'Simulated: ' + (tideMode === 'sim' ? 'on' : 'off');
-  $('btnTide').classList.toggle('active', tideMode === 'sim');
-  $('btnLive').textContent = 'Live tide: ' + (tideMode === 'live' ? 'on' : 'off');
-  $('btnLive').classList.toggle('active', tideMode === 'live');
-  $('stretch').disabled = tideMode !== 'off';
-  if (tideMode !== 'live') $('liveStatus').textContent = '';
-  if (tideMode === 'live') { live.lastPoll = 0; loadStations(); }
-}
-$('btnTide').onclick = () => setMode('sim');
-$('btnLive').onclick = () => setMode('live');
-$('station').onchange = () => {
-  const opt = $('station').selectedOptions[0];
-  if (!opt) return;
-  live.station = $('station').value;
-  live.name = opt.textContent;
-  live.lastPoll = 0;                        // poll the new station straight away
+  $('btnTide').textContent = 'Simulated: ' + (simOn ? 'on' : 'off');
+  $('btnTide').classList.toggle('active', simOn);
+  $('stretch').disabled = simOn;
 };
-
-function addStationGroup(label, opts) {
-  const g = document.createElement('optgroup');
-  g.label = label;
-  for (const [text, value] of opts) {
-    const o = document.createElement('option');
-    o.value = value; o.textContent = text;
-    g.appendChild(o);
-  }
-  $('station').appendChild(g);
-}
-
-let stationsLoaded = false;
-async function loadStations() {
-  if (stationsLoaded) return;
-  stationsLoaded = true;
-  // UK: Environment Agency tidal level stations
-  try {
-    const d = await (await fetch(EA + '/id/stations?parameter=level&qualifier=Tidal+Level&_limit=500')).json();
-    const seen = new Set(['E70039']);
-    const opts = [];
-    for (const s of d.items || []) {
-      if (!s.notation || !s.label || seen.has(s.notation)) continue;
-      seen.add(s.notation);
-      opts.push([String(s.label) + ' (UK)', 'uk:' + s.notation]);
-    }
-    opts.sort((a, b) => a[0].localeCompare(b[0]));
-    addStationGroup('United Kingdom', opts);
-  } catch (e) { /* keep default */ }
-  // Ireland: Marine Institute tide gauge network (stations seen in last 2 h)
-  try {
-    const since = new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
-    const d = await (await fetch(IE + '?station_id,time&time%3E=' + since)).json();
-    const names = [...new Set(d.table.rows.map(r => r[0]))].sort();
-    addStationGroup('Ireland', names.map(n => [n + ' (IE)', 'ie:' + n]));
-  } catch (e) { /* Irish feed unavailable — UK list still works */ }
-  // Australia: Queensland Government storm tide gauges
-  try {
-    const sql = 'SELECT DISTINCT "Site" FROM "' + QLD_RES + '" ORDER BY "Site"';
-    const d = await (await fetch(QLD + '/datastore_search_sql?sql=' + encodeURIComponent(sql))).json();
-    const opts = d.result.records.map(r => {
-      const id = r.Site;
-      const label = id.charAt(0).toUpperCase() + id.slice(1) + ' (AU)';
-      return [label, 'au:' + id];
-    });
-    addStationGroup('Australia — Queensland', opts);
-  } catch (e) { /* Queensland feed unavailable */ }
-}
-
-// One code path for both feeds: fetch the last ~25 h of levels,
-// calibrate min/max from them, and take the newest reading as "now".
-async function readTide() {
-  const i = live.station.indexOf(':');
-  const src = live.station.slice(0, i), id = live.station.slice(i + 1);
-  if (src === 'ie') {
-    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
-    const url = IE + '?station_id,time,Water_Level_OD_Malin&station_id=%22' + encodeURIComponent(id) + '%22&time%3E=' + since;
-    const d = await (await fetch(url)).json();
-    const rows = (d.table.rows || []).filter(r => typeof r[2] === 'number');
-    if (rows.length < 10) throw new Error('too few readings');
-    const vals = rows.map(r => r[2]);
-    const last = rows[rows.length - 1];
-    return { min: Math.min(...vals), max: Math.max(...vals), level: last[2], time: last[1] };
-  }
-  if (src === 'au') {
-    // 10-minute readings; 150 ≈ last 25 h. -99 is their missing-data sentinel.
-    const q = QLD + '/datastore_search?resource_id=' + QLD_RES +
-      '&filters=' + encodeURIComponent(JSON.stringify({ Site: id })) +
-      '&sort=' + encodeURIComponent('Seconds desc') + '&limit=150';
-    const d = await (await fetch(q)).json();
-    const recs = (d.result.records || [])
-      .map(r => ({ v: parseFloat(r['Water Level']), t: r.DateTime }))
-      .filter(r => isFinite(r.v) && r.v > -90);
-    if (recs.length < 10) throw new Error('too few readings');
-    const vals = recs.map(r => r.v);
-    return { min: Math.min(...vals), max: Math.max(...vals), level: recs[0].v, time: recs[0].t + '+10:00' };
-  }
-  const d = await (await fetch(EA + '/id/stations/' + id + '/readings?_sorted&_limit=100')).json();
-  const items = (d.items || []).filter(x => typeof x.value === 'number');
-  if (items.length < 10) throw new Error('too few readings');
-  const vals = items.map(x => x.value);
-  return { min: Math.min(...vals), max: Math.max(...vals), level: items[0].value, time: items[0].dateTime };
-}
-
-async function pollTide() {
-  try {
-    const t = await readTide();
-    const frac = Math.min(1, Math.max(0, (t.level - t.min) / Math.max(t.max - t.min, 0.01)));
-    const lo = +$('tideMin').value, hi = +$('tideMax').value;
-    const s = hi - (hi - lo) * frac;          // high water -> low stretch
-    $('stretch').value = stretchToSlider(s);
-    sendStretch();
-    const age = Math.round((Date.now() - new Date(t.time)) / 60000);
-    $('liveStatus').innerHTML = '<b>' + live.name + '</b> ' + t.level.toFixed(2) + ' m (' + age + ' min ago) → ' + s.toFixed(1) + '×';
-  } catch (e) {
-    $('liveStatus').textContent = 'tide fetch failed — retrying in 5 min';
-  }
-}
-
 setInterval(() => {
+  if (!simOn) return;
   const now = Date.now();
-  if (tideMode === 'sim') {
-    const period = +$('tidePeriod').value * 1000;
-    const lo = +$('tideMin').value, hi = +$('tideMax').value;
-    const phase = ((now - tideStart) % period) / period;
-    // start at high tide (low stretch) and ebb out
-    const x = (Math.cos(phase * 2 * Math.PI) + 1) / 2;      // 1 -> 0 -> 1
-    const s = hi - (hi - lo) * x;
-    $('stretch').value = stretchToSlider(s);
-    sendStretch();
-  } else if (tideMode === 'live' && now - live.lastPoll > 5 * 60 * 1000) {
-    live.lastPoll = now;
-    pollTide();
-  }
+  const period = +$('tidePeriod').value * 1000;
+  const lo = +$('tideMin').value, hi = +$('tideMax').value;
+  const phase = ((now - tideStart) % period) / period;
+  const x = (Math.cos(phase * 2 * Math.PI) + 1) / 2;      // 1 -> 0 -> 1
+  const s = hi - (hi - lo) * x;
+  $('stretch').value = stretchToSlider(s);
+  sendStretch();
 }, 1000);
 
-// --- retro pixel sea ---
-// Procedural dithered wave in the spirit of a 90s 256-colour GIF: a tiny
-// 240x72 canvas, a fixed 14-colour washed palette, 4x4 Bayer ordered
-// dithering, ~10 fps. The sea obeys the piece: wave size follows the tide
-// (tideFrac) and animation speed follows the current stretch — at 30x the
-// picture nearly freezes with the sound.
-const wv = $('wave'), WVW = 240;
-let WVH = 72;
-const wctx = wv.getContext('2d');
-let wimg = wctx.createImageData(WVW, WVH);
-
-// full screen: the sea fills the display (audio is untouched — it lives in
-// the audio graph, not the picture). Native Fullscreen API where available
-// (orientation-locked to landscape on Android); on iPhone, which has no
-// Fullscreen API, a fixed overlay — rotated 90° in portrait so the sea is
-// always landscape. Esc or the button comes back.
-function isFullish() {
-  return !!document.fullscreenElement || $('waveWrap').classList.contains('fake');
-}
-function setWaveSize() {
-  const fs = isFullish();
-  if (fs) {
-    // the sea always renders landscape: long edge over short edge
-    const long = Math.max(innerWidth, innerHeight), short = Math.min(innerWidth, innerHeight);
-    WVH = Math.max(48, Math.round(WVW * short / long));
-  } else {
-    WVH = 72;
-  }
-  wv.width = WVW; wv.height = WVH;
-  wimg = wctx.createImageData(WVW, WVH);
-  $('btnFull').textContent = fs ? '✕ exit' : '⛶ full screen';
-  drawWave();
-}
-$('btnFull').onclick = async () => {
-  const wrap = $('waveWrap');
-  if (document.fullscreenElement) { document.exitFullscreen(); return; }
-  if (wrap.classList.contains('fake')) { wrap.classList.remove('fake', 'rot'); setWaveSize(); return; }
-  const rq = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
-  if (rq) {
-    try {
-      await rq.call(wrap);
-      try { await screen.orientation.lock('landscape'); } catch (e) { /* iOS/desktop: not allowed */ }
-      return;                                  // fullscreenchange does the sizing
-    } catch (e) { /* fall through to the overlay */ }
-  }
-  wrap.classList.add('fake');
-  if (innerHeight > innerWidth) wrap.classList.add('rot');
-  setWaveSize();
-};
-for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
-  document.addEventListener(ev, () => {
-    if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (e) {} }
-    setWaveSize();
-  });
-}
-window.addEventListener('resize', () => {
-  if (!isFullish()) return;
-  const wrap = $('waveWrap');
-  if (wrap.classList.contains('fake')) wrap.classList.toggle('rot', innerHeight > innerWidth);
-  setWaveSize();
-});
-const PAL = [
-  [244, 250, 252], [214, 236, 244], [176, 214, 234], [130, 184, 216], [96, 156, 200],
-  [224, 248, 240], [150, 224, 200], [96, 200, 172], [56, 172, 146], [32, 140, 122],
-  [30, 110, 140], [22, 84, 118], [16, 60, 96], [12, 42, 72],
-];
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v / 16 - 0.5) * 30);
-let wt = 0;
-function drawWave() {
-  const d = wimg.data;
-  const horizon = WVH * (0.47 - tideFrac * 0.125);        // tide in -> more sea
-  const A = WVH * (0.11 + 0.22 * tideFrac);               // wave size follows tide
-  const cx = ((wt * 9) % (WVW + 120)) - 60;               // crest rolls across
-  for (let x = 0; x < WVW; x++) {
-    const bulge = A * Math.exp(-(((x - cx) / 20) ** 2));
-    const ripple = (WVH / 72) * (1.6 * Math.sin(x * 0.13 + wt * 1.1) + 1.2 * Math.sin(x * 0.045 - wt * 0.6));
-    const surf = horizon - bulge - ripple;
-    for (let y = 0; y < WVH; y++) {
-      let r, g, b;
-      if (y < surf) {
-        // washed sky with drifting cloud banks
-        const t = y / Math.max(surf, 1);
-        r = 244 - 114 * t; g = 250 - 66 * t; b = 252 - 36 * t;
-        const cl = 0.5 + 0.5 * Math.sin(x * 0.05 + wt * 0.13 + 2.5 * Math.sin(y * 0.22 + x * 0.01));
-        if (cl > 0.52) { const w = (cl - 0.52) * 1.6; r += (250 - r) * w; g += (252 - g) * w; b += (252 - b) * w; }
-        // spray above a big crest
-        if (bulge > A * 0.5 && surf - y < bulge * 0.5) {
-          const h = Math.sin(x * 12.9898 + Math.floor(y * 0.7) * 78.233 + Math.floor(wt * 2)) * 43758.5;
-          if (h - Math.floor(h) > 0.72) { r = 246; g = 252; b = 250; }
-        }
-      } else {
-        const depth = Math.min(1, (y - surf) / (WVH - horizon));
-        // teal surface fading to deep blue
-        r = 70 - 56 * depth; g = 196 - 152 * depth; b = 172 - 96 * depth;
-        // lit face of the breaking wave
-        const face = bulge / A;
-        if (face > 0.25 && x < cx && y - surf < bulge * 1.2) {
-          const w = (face - 0.25) * 1.1;
-          r += 70 * w; g += 52 * w; b += 20 * w;
-        }
-        // foam at the crest and scattered streaks on the surface
-        if (y - surf < 2.5 && (bulge > A * 0.45 || Math.sin(x * 0.7 + wt * 1.7) > 0.82)) { r = 240; g = 250; b = 246; }
-      }
-      const dith = BAYER[(x & 3) + ((y & 3) << 2)];
-      r += dith; g += dith; b += dith;
-      // nearest colour in the fixed palette
-      let bi = 0, bd = 1e9;
-      for (let i = 0; i < PAL.length; i++) {
-        const p = PAL[i];
-        const dd = (r - p[0]) * (r - p[0]) + (g - p[1]) * (g - p[1]) * 1.4 + (b - p[2]) * (b - p[2]);
-        if (dd < bd) { bd = dd; bi = i; }
-      }
-      const o = (y * WVW + x) * 4, p = PAL[bi];
-      d[o] = p[0]; d[o + 1] = p[1]; d[o + 2] = p[2]; d[o + 3] = 255;
-    }
-  }
-  wctx.putImageData(wimg, 0, 0);
-  // the sea in the picture slows with the sound
-  wt += 0.1 * (0.15 + 2.2 / Math.max(actualStretch, 1));
-}
-setInterval(drawWave, 100);
-drawWave();
-
-// --- scope drawing ---
+// lab scope
 const scope = $('scope');
 function drawScope(now) {
+  if ($('labScreen').style.display !== 'block') return;
   history.push([now, actualStretch]);
   while (history.length && now - history[0][0] > 120000) history.shift();
   const dpr = window.devicePixelRatio || 1;
@@ -955,12 +1504,25 @@ function drawScope(now) {
     g.stroke();
   }
 }
+setInterval(() => drawScope(Date.now()), 500);
 
-function loop(now) {
-  drawScope(now);
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+// ---------------------------------------------------------------
+// boot
+// ---------------------------------------------------------------
+(async () => {
+  resizeMap();
+  try {
+    WORLD = await (await fetch('world.json')).json();
+    maskDirty = true;
+  } catch (e) { console.log('world outline failed to load', e); }
+  try {
+    await loadData();
+    applyHash();
+  } catch (e) {
+    setTicker('could not load the station list — refresh to retry');
+  }
+  setTimeout(() => { if (!selected) $('hint').style.opacity = 1; }, 400);
+})();
 </script>
 </body>
 </html>
