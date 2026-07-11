@@ -84,12 +84,15 @@
 <body>
 <div class="wrap">
   <h1>Tide <span>Stretch</span></h1>
-  <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Start the radio (or drop a file in), press play, switch the live tide on, and leave it running.</p>
+  <p class="sub">Live radio, slowed down by the actual sea. Pick a real tide gauge — Killybegs, Dublin, Lowestoft, anywhere in Ireland or the UK — and the water level sets how much the sound is stretched: tide out, the radio smears into an ambient drone; tide in, the voices slowly return. Works with any audio file too. Press GO and leave it running.</p>
 
   <div id="waveWrap">
     <canvas id="wave" width="240" height="72"></canvas>
     <button id="btnFull" title="full screen — sound keeps playing, Esc to come back">⛶ full screen</button>
   </div>
+
+  <button class="primary" id="btnGo" style="width:100%; padding:15px; font-size:16px; margin-bottom:6px">▶ GO — Highland Radio on the Killybegs tide</button>
+  <div class="status" id="goStatus" style="text-align:center; margin-bottom:16px"></div>
 
   <div class="panel">
     <h2>Source sound</h2>
@@ -422,6 +425,7 @@ async function initAudio() {
   const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
   await ctx.audioWorklet.addModule(url);
   node = new AudioWorkletNode(ctx, 'paulstretch', { outputChannelCount: [2] });
+  node.onprocessorerror = () => console.log('[engine] worklet processor crashed');
   gain = ctx.createGain();
   gain.gain.value = 0.8;
   node.connect(gain).connect(ctx.destination);
@@ -461,47 +465,71 @@ function loadChannels(chData, label) {
 }
 
 // --- live radio (Highland Radio, Letterkenny) ---
-// An <audio> element does the streaming (codecs, buffering, reconnects),
-// and its output is routed INTO the paulstretch worklet, which appends it
-// to a 5-minute rolling ring buffer. The stream sends CORS headers, so the
-// samples are readable rather than tainted.
+// The MP3 stream is fetched in ~10 s chunks and decoded with the Web Audio
+// decoder, then appended to the worklet's 5-minute rolling ring buffer.
+// The 'Range: bytes=0-' header is essential: without it StreamTheWorld
+// sniffs the request as a scraper and closes the connection immediately.
+// (An <audio>-element route was tried first, but iOS refuses to feed
+// cross-origin element audio into the graph — you hear the raw station.)
 const RADIO_URL = 'https://playerservices.streamtheworld.com/api/livestream-redirect/HIGHLAND_RADIO.mp3';
-let radio = { on: false, name: 'Highland Radio' };
-let radioEl = null, radioSrc = null;
+let radio = { on: false, ctrl: null, name: 'Highland Radio' };
 
 async function startRadio() {
   await ensureAudio();
-  await ctx.resume();
   radio.on = true; loaded = true;
   $('btnRadio').classList.add('active');
   $('btnRadio').textContent = '📻 Highland Radio: connecting…';
-  $('srcStatus').textContent = 'connecting to the stream…';
+  $('srcStatus').textContent = 'buffering the stream (~10 s)…';
   node.port.postMessage({ t: 'liveStart', cap: Math.floor(ctx.sampleRate * 300) });
-  if (!radioEl) {
-    radioEl = new Audio();
-    radioEl.crossOrigin = 'anonymous';
-    radioEl.preload = 'auto';
-    radioSrc = ctx.createMediaElementSource(radioEl);
-    radioEl.addEventListener('playing', () => {
-      if (radio.on) $('btnRadio').textContent = '📻 Highland Radio: live';
-    });
-    radioEl.addEventListener('error', () => {
-      console.log('[radio] element error — retrying in 3 s');
-      if (radio.on) setTimeout(() => {
-        if (radio.on) { radioEl.load(); radioEl.play().catch(() => {}); }
-      }, 3000);
-    });
+  radio.ctrl = new AbortController();
+  let fails = 0;
+  while (radio.on && fails < 30) {
+    try {
+      const resp = await fetch(RADIO_URL, {
+        signal: radio.ctrl.signal, cache: 'no-store',
+        headers: { 'Range': 'bytes=0-' },
+      });
+      const rdr = resp.body.getReader();
+      let acc = [], accLen = 0;
+      while (radio.on) {
+        const { done, value } = await rdr.read();
+        if (done) { console.log('[radio] stream ended — reconnecting'); break; }
+        acc.push(value); accLen += value.length;
+        if (accLen >= 160 * 1024) {                    // ~10 s at 128 kbps
+          const all = new Uint8Array(accLen); let o = 0;
+          for (const a of acc) { all.set(a, o); o += a.length; }
+          acc = []; accLen = 0;
+          // align to an MP3 frame sync so stricter decoders (Safari) cope
+          let s = 0;
+          while (s < all.length - 1 && !(all[s] === 0xFF && (all[s + 1] & 0xE0) === 0xE0)) s++;
+          const chunk = all.slice(s);
+          try {
+            const ab = await ctx.decodeAudioData(chunk.buffer);
+            fails = 0;
+            const nSamp = ab.length, mono = new Float32Array(nSamp);
+            for (let c = 0; c < ab.numberOfChannels; c++) {
+              const dd = ab.getChannelData(c);
+              for (let i = 0; i < nSamp; i++) mono[i] += dd[i] / ab.numberOfChannels;
+            }
+            node.port.postMessage({ t: 'append', data: mono }, [mono.buffer]);
+            $('btnRadio').textContent = '📻 Highland Radio: live';
+          } catch (e) { console.log('[radio] chunk decode failed, skipping'); }
+        }
+      }
+    } catch (e) {
+      if (!radio.on || e.name === 'AbortError') break;
+      console.log('[radio] error', e.message);
+    }
+    fails++;
+    if (radio.on) await new Promise(r => setTimeout(r, Math.min(fails * 1500, 10000)));
   }
-  radioSrc.connect(node);
-  radioEl.src = RADIO_URL;
-  try { await radioEl.play(); } catch (e) { console.log('[radio] play() refused:', e.message); }
+  if (radio.on && fails >= 30) { $('srcStatus').textContent = 'radio stream failed — tap GO to retry'; stopRadio(); }
 }
 
 function stopRadio() {
   if (!radio.on) return;
   radio.on = false;
-  try { radioSrc.disconnect(node); } catch (e) {}
-  if (radioEl) { radioEl.pause(); radioEl.removeAttribute('src'); radioEl.load(); }
+  if (radio.ctrl) radio.ctrl.abort();
   $('btnRadio').classList.remove('active');
   $('btnRadio').textContent = '📻 Highland Radio live';
 }
@@ -564,6 +592,32 @@ $('btnPlay').onclick = async () => {
   node.port.postMessage({ t: playing ? 'play' : 'stop' });
   $('btnPlay').textContent = playing ? '⏸ Stop' : '▶ Play';
   $('status').textContent = playing ? 'playing — move the slider or switch the tide on' : '';
+};
+
+// --- the one-tap GO button: radio + play + live tide in a single gesture ---
+$('btnGo').onclick = async () => {
+  if (playing) {
+    // stop the machine
+    stopRadio();
+    playing = false;
+    node.port.postMessage({ t: 'stop' });
+    if (tideMode !== 'off') setMode(tideMode);          // toggles current mode off
+    $('btnPlay').textContent = '▶ Play';
+    $('btnGo').textContent = '▶ GO — Highland Radio on the Killybegs tide';
+    $('goStatus').textContent = '';
+    $('status').textContent = '';
+    return;
+  }
+  await ensureAudio();
+  await ctx.resume();                                   // inside the tap = allowed on mobile
+  if (!radio.on) startRadio();                          // runs its own reconnect loop
+  playing = true;
+  node.port.postMessage({ t: 'play' });
+  if (tideMode !== 'live') setMode('live');
+  $('btnPlay').textContent = '⏸ Stop';
+  $('btnGo').textContent = '◼ Stop';
+  $('goStatus').textContent = 'buffering the radio — sound begins in ~10 s, then drifts on the tide';
+  setTimeout(() => { if (playing) $('goStatus').textContent = ''; }, 20000);
 };
 
 // file drop
