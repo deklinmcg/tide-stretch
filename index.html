@@ -102,7 +102,7 @@
     <button id="btnFull" title="full screen — sound keeps playing, Esc to come back">⛶ full screen</button>
   </div>
 
-  <button class="primary" id="btnGo" style="width:100%; padding:15px; font-size:16px; margin-bottom:6px">▶ GO — Highland Radio on the Killybegs tide</button>
+  <button class="primary" id="btnGo" style="width:100%; padding:15px; font-size:16px; margin-bottom:6px">▶ GO — Highland Radio on the Buncrana tide</button>
   <div class="status" id="goStatus" style="text-align:center; margin-bottom:16px"></div>
 
   <div class="panel">
@@ -149,7 +149,7 @@
     <h2>Tide signal</h2>
     <div class="row">
       <button id="btnLive">Live tide: off</button>
-      <select id="station" title="tide gauge station"><option value="ie:Killybegs Port">Killybegs Port (IE)</option></select>
+      <select id="station" title="tide gauge station"><option value="ie:Buncranna">Buncranna (IE)</option></select>
       <span class="status" id="liveStatus" style="margin-top:0"></span>
     </div>
     <div class="row" style="margin-top:10px">
@@ -631,7 +631,7 @@ $('btnGo').onclick = async () => {
     node.port.postMessage({ t: 'stop' });
     if (tideMode !== 'off') setMode(tideMode);          // toggles current mode off
     $('btnPlay').textContent = '▶ Play';
-    $('btnGo').textContent = '▶ GO — Highland Radio on the Killybegs tide';
+    $('btnGo').textContent = '▶ GO — Highland Radio on the Buncrana tide';
     $('goStatus').textContent = '';
     $('status').textContent = '';
     return;
@@ -661,7 +661,7 @@ drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) loadFile(e.dat
 // tabs, and this is meant to be left running in one.
 let tideMode = 'off';                  // 'off' | 'sim' | 'live'
 let tideStart = 0;
-let live = { lastPoll: 0, station: 'ie:Killybegs Port', name: 'Killybegs Port (IE)' };
+let live = { lastPoll: 0, station: 'ie:Buncranna', name: 'Buncranna (IE)' };
 const QLD = 'https://www.data.qld.gov.au/api/3/action';
 const QLD_RES = '7afe7233-fae0-4024-bc98-3a72f05675bd';   // Coastal Data System — near real time storm tide
 const EA = 'https://environment.data.gov.uk/flood-monitoring';
