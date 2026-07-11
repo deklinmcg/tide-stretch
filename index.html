@@ -40,7 +40,10 @@
   select, input[type=number] {
     background: #1b2733; color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 8px 10px; font-size: 14px;
+    max-width: 100%;
   }
+  /* long station names must not stretch the layout on phones */
+  #station { max-width: min(300px, 48vw); text-overflow: ellipsis; }
   input[type=number] { width: 72px; }
   .drop {
     border: 1.5px dashed var(--line); border-radius: 10px;
